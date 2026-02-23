@@ -27,7 +27,7 @@ module Ductwork
          collapse: "collapse",
          divert: "divert",
          converge: "converge",
-         damper: "damper"
+         dampen: "dampen"
 
     def self.build_for_execution(pipeline_id, *, **)
       instance = allocate

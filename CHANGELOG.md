@@ -1,5 +1,9 @@
 # Ductwork Changelog
 
+## [0.25.0] (Unreleased)
+
+- chore: align "dampen" naming and remove "pause" naming
+
 ## [0.24.0]
 
 - feat: add new step transition enum values

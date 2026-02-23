@@ -99,8 +99,8 @@ module Ductwork
                 # rubocop:todo Metrics/BlockNesting
                 status = if pipeline.completed?
                            "completed"
-                         elsif pipeline.paused?
-                           "paused"
+                         elsif pipeline.dampened?
+                           "dampened"
                          else
                            "in_progress"
                          end

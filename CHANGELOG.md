@@ -1,6 +1,6 @@
 # Ductwork Changelog
 
-## [0.26.0] (Unreleased)
+## [0.26.0]
 
 - feat: add `divert` and complementary `converge` transitions - this is essentially a conditional/case statement transition for pipelines including it's "fan-in" method
 

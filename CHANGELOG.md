@@ -1,7 +1,8 @@
 # Ductwork Changelog
 
-## [0.26.1] (Unreleased)
+## [0.27.0] (Unreleased)
 
+- feat: introduce `Branch` and `BranchJunction` models and tables
 - fix: correctly log transition names via edge
 
 ## [0.26.0]

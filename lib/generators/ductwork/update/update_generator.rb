@@ -19,6 +19,23 @@ module Ductwork
         migration_template "db/migrate_tables_to_uuid_primary_key.rb",
                            "db/migrate/migrate_tables_to_uuid_primary_key.rb"
       end
+
+      if !Ductwork::Record.connection.table_exists?(:ductwork_branches)
+        migration_template "db/create_ductwork_branches.rb",
+                           "db/migrate/create_ductwork_branches.rb"
+      end
+
+      if !Ductwork::Record.connection.table_exists?(:ductwork_branch_junctions)
+        migration_template "db/create_ductwork_branch_junctions.rb",
+                           "db/migrate/create_ductwork_branch_junctions.rb"
+      end
+
+      if Ductwork::Step.column_names.exclude?("branch_id")
+        migration_template "db/associate_steps_to_branches.rb",
+                           "db/migrate/associate_steps_to_branches.rb"
+        migration_template "db/backfill_branch_ids_on_steps.rb",
+                           "db/migrate/backfill_branch_ids_on_steps.rb"
+      end
     end
   end
 end

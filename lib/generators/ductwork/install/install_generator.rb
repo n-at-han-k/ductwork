@@ -17,6 +17,10 @@ module Ductwork
 
       migration_template "db/create_ductwork_pipelines.rb",
                          "db/migrate/create_ductwork_pipelines.rb"
+      migration_template "db/create_ductwork_branches.rb",
+                         "db/migrate/create_ductwork_branches.rb"
+      migration_template "db/create_ductwork_branch_junctions.rb",
+                         "db/migrate/create_ductwork_branch_junctions.rb"
       migration_template "db/create_ductwork_steps.rb",
                          "db/migrate/create_ductwork_steps.rb"
       migration_template "db/create_ductwork_jobs.rb",

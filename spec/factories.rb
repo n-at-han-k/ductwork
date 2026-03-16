@@ -7,6 +7,14 @@ FactoryBot.define do
     execution
   end
 
+  factory :branch, class: "Ductwork::Branch" do
+    last_advanced_at { Time.current }
+    pipeline_klass { "MyPipeline" }
+    started_at { Time.current }
+    status { Ductwork::Branch.statuses.keys.sample }
+    pipeline
+  end
+
   factory :execution, class: "Ductwork::Execution" do
     started_at { Time.current }
     retry_count { 0 }
@@ -37,5 +45,6 @@ FactoryBot.define do
     status { Ductwork::Step.statuses.keys.sample }
     to_transition { Ductwork::Step.to_transitions.keys.sample }
     pipeline
+    branch
   end
 end

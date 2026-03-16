@@ -10,6 +10,13 @@ class CreateDuctworkSteps < Ductwork::Migration
         null: false,
         foreign_key: { to_table: :ductwork_pipelines }
       )
+      belongs_to(
+        table,
+        :branch,
+        index: true,
+        null: true,
+        foreign_key: { to_table: :ductwork_branches }
+      )
       table.string :node, null: false
       table.string :klass, null: false
       table.string :to_transition, null: false

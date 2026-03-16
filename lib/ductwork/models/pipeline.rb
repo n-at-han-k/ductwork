@@ -2,6 +2,7 @@
 
 module Ductwork
   class Pipeline < Ductwork::Record # rubocop:todo Metrics/ClassLength
+    has_many :branches, class_name: "Ductwork::Branch", foreign_key: "pipeline_id", dependent: :destroy
     has_many :steps, class_name: "Ductwork::Step", foreign_key: "pipeline_id", dependent: :destroy
     has_many :tuples, class_name: "Ductwork::Tuple", foreign_key: "pipeline_id", dependent: :destroy
 

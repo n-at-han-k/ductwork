@@ -2,6 +2,7 @@
 
 ## [0.27.0] (Unreleased)
 
+- fix: job availability claim and update state in a single transaction
 - feat: complete and halt active branches for pipelines
 - feat: create initial branch when a pipeline is triggered
 - feat: introduce `Branch` and `BranchJunction` models and tables

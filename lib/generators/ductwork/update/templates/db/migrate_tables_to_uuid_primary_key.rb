@@ -31,6 +31,7 @@ class MigrateTablesToUuidPrimaryKey < Ductwork::Migration
     drop_old_foreign_keys
     swap_primary_keys
     swap_foreign_keys
+    create_missing_indexes
   end
 
   def down
@@ -114,5 +115,9 @@ class MigrateTablesToUuidPrimaryKey < Ductwork::Migration
         add_foreign_key table, "ductwork_#{prefix}s", column: "#{prefix}_id"
       end
     end
+  end
+
+  def create_missing_indexes
+    add_index :ductwork_tuples, %i[key pipeline_id], unique: true
   end
 end

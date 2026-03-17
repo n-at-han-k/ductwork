@@ -10,37 +10,39 @@ module Ductwork
     end
 
     def latest
-      @id = latest_availability_id
+      Ductwork::Record.transaction do # rubocop:todo Metrics/BlockLength
+        @id = latest_availability_id
 
-      if id.present?
-        rows_updated = claim_availability
+        if id.present?
+          rows_updated = claim_availability
 
-        if rows_updated == 1
-          Ductwork.logger.debug(
-            msg: "Job claimed",
-            role: :job_worker,
-            process_id: process_id,
-            availability_id: id
-          )
+          if rows_updated == 1
+            Ductwork.logger.debug(
+              msg: "Job claimed",
+              role: :job_worker,
+              process_id: process_id,
+              availability_id: id
+            )
 
-          @job = find_job
+            @job = find_job
 
-          update_state
+            update_state
+          else
+            Ductwork.logger.debug(
+              msg: "Did not claim job, avoided race condition",
+              role: :job_worker,
+              process_id: process_id,
+              availability_id: id
+            )
+          end
         else
           Ductwork.logger.debug(
-            msg: "Did not claim job, avoided race condition",
+            msg: "No available job to claim",
             role: :job_worker,
             process_id: process_id,
-            availability_id: id
+            pipeline: klass
           )
         end
-      else
-        Ductwork.logger.debug(
-          msg: "No available job to claim",
-          role: :job_worker,
-          process_id: process_id,
-          pipeline: klass
-        )
       end
 
       job
@@ -73,16 +75,14 @@ module Ductwork
     end
 
     def update_state
-      Ductwork::Record.transaction do
-        Ductwork::Execution
-          .joins(:availability)
-          .where(completed_at: nil)
-          .where(ductwork_availabilities: { id: })
-          .sole
-          .update!(process_id:)
-        job.step.in_progress!
-        job.step.pipeline.in_progress!
-      end
+      Ductwork::Execution
+        .joins(:availability)
+        .where(completed_at: nil)
+        .where(ductwork_availabilities: { id: })
+        .sole
+        .update!(process_id:)
+      job.step.in_progress!
+      job.step.pipeline.in_progress!
     end
   end
 end

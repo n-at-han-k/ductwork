@@ -1,6 +1,12 @@
 # frozen_string_literal: true
 
 FactoryBot.define do
+  factory :advancement, class: "Ductwork::Advancement" do
+    started_at { Time.current }
+    process
+    transition
+  end
+
   factory :availability, class: "Ductwork::Availability" do
     started_at { Time.current }
     pipeline_klass { "MyPipeline" }
@@ -16,6 +22,11 @@ FactoryBot.define do
 
     trait :in_progress do
       status { "in_progress" }
+    end
+
+    trait :completed do
+      status { "completed" }
+      completed_at { Time.current }
     end
   end
 
@@ -42,6 +53,21 @@ FactoryBot.define do
     status { Ductwork::Pipeline.statuses.keys.sample }
   end
 
+  factory :process, class: "Ductwork::Process" do
+    sequence(:pid, &:itself)
+    sequence(:machine_identifier) { |n| "Machine#{n}" }
+    last_heartbeat_at { Time.current }
+
+    trait :current do
+      pid { ::Process.pid }
+      machine_identifier do
+        File.read("/etc/machine-id").strip.presence || Socket.gethostname
+      rescue Errno::ENOENT
+        Socket.gethostname
+      end
+    end
+  end
+
   factory :step, class: "Ductwork::Step" do
     node { "MyFirstStep.0" }
     klass { "MyFirstStep" }
@@ -50,5 +76,21 @@ FactoryBot.define do
     to_transition { Ductwork::Step.to_transitions.keys.sample }
     pipeline
     branch
+
+    trait :advancing do
+      status { "advancing" }
+    end
+
+    trait :completed do
+      status { "completed" }
+      completed_at { Time.current }
+    end
+  end
+
+  factory :transition, class: "Ductwork::Transition" do
+    started_at { Time.current }
+    branch
+    in_step factory: :step
+    out_step factory: :step
   end
 end

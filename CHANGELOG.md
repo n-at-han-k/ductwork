@@ -1,7 +1,8 @@
 # Ductwork Changelog
 
-## [0.27.0] (Unreleased)
+## [1.0.0] (Unreleased)
 
+- feat!: advance branches instead of pipelines - BREAKING CHANGE: this completely changes how pipelines are advanced. to migrate let all your current pipelines complete then deploy
 - fix: delete child process records when restarting within supervisor
 - fix: wrap optimistic job claiming in a single transaction
 - chore: bump project and CI ruby versions to v4.0.2

@@ -25,9 +25,9 @@ module Ductwork
                            "db/migrate/create_ductwork_branches.rb"
       end
 
-      if !Ductwork::Record.connection.table_exists?(:ductwork_branch_junctions)
-        migration_template "db/create_ductwork_branch_junctions.rb",
-                           "db/migrate/create_ductwork_branch_junctions.rb"
+      if !Ductwork::Record.connection.table_exists?(:ductwork_branch_links)
+        migration_template "db/create_ductwork_branch_links.rb",
+                           "db/migrate/create_ductwork_branch_links.rb"
       end
 
       if Ductwork::Step.column_names.exclude?("branch_id")
@@ -35,6 +35,16 @@ module Ductwork
                            "db/migrate/associate_steps_to_branches.rb"
         migration_template "db/backfill_branch_ids_on_steps.rb",
                            "db/migrate/backfill_branch_ids_on_steps.rb"
+      end
+
+      if !Ductwork::Record.connection.table_exists?(:ductwork_transitions)
+        migration_template "db/create_ductwork_transitions.rb",
+                           "db/migrate/create_ductwork_transitions.rb"
+      end
+
+      if !Ductwork::Record.connection.table_exists?(:ductwork_advancements)
+        migration_template "db/create_ductwork_advancements.rb",
+                           "db/migrate/create_ductwork_advancements.rb"
       end
     end
   end

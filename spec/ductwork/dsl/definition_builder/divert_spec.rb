@@ -10,7 +10,7 @@ RSpec.describe Ductwork::DSL::DefinitionBuilder, "#divert" do
   end
 
   it "returns the builder instance when given a block" do
-    returned_builder = builder # rubocop:disable Lint/EmptyBlock
+    returned_builder = builder
                        .start(MyFirstStep)
                        .divert(to: { bar: MySecondStep, otherwise: MyThirdStep }) {}
 

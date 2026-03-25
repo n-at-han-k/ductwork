@@ -45,7 +45,7 @@ module Ductwork
 
       attr_reader :klass, :index, :running_context
 
-      def work_loop # rubocop:todo Metrics
+      def work_loop
         run_hooks_for(:start)
 
         Ductwork.logger.debug(
@@ -55,80 +55,8 @@ module Ductwork
         )
 
         while running_context.running?
-          id = Ductwork.wrap_with_app_executor do
-            Ductwork::Pipeline
-              .in_progress
-              .where(klass: klass, claimed_for_advancing_at: nil)
-              .where(steps: Ductwork::Step.where(status: :advancing))
-              .where.not(steps: Ductwork::Step.where.not(status: %w[advancing completed]))
-              .order(:last_advanced_at)
-              .limit(1)
-              .pluck(:id)
-              .first
-          end
-
-          if id.present?
-            rows_updated = Ductwork.wrap_with_app_executor do
-              Ductwork::Pipeline
-                .where(id: id, claimed_for_advancing_at: nil)
-                .update_all(
-                  claimed_for_advancing_at: Time.current,
-                  status: "advancing"
-                )
-            end
-
-            if rows_updated == 1
-              Ductwork.logger.debug(
-                msg: "Pipeline claimed",
-                pipeline_id: id,
-                pipeline: klass,
-                role: :pipeline_advancer
-              )
-
-              @pipeline = Ductwork.wrap_with_app_executor do
-                @pipeline = Ductwork::Pipeline.find(id)
-                pipeline.advance!
-
-                Ductwork.logger.debug(
-                  msg: "Pipeline advanced",
-                  pipeline_id: id,
-                  pipeline: klass,
-                  role: :pipeline_advancer
-                )
-
-                # rubocop:todo Metrics/BlockNesting
-                status = if pipeline.completed?
-                           "completed"
-                         elsif pipeline.dampened?
-                           "dampened"
-                         else
-                           "in_progress"
-                         end
-                # rubocop:enable Metrics/BlockNesting
-              ensure
-                # release the pipeline and set last advanced at so it doesn't
-                # block. we're not using a queue so we have to use a db
-                # timestamp
-                pipeline.update!(
-                  claimed_for_advancing_at: nil,
-                  last_advanced_at: Time.current,
-                  status: status || "in_progress"
-                )
-              end
-            else
-              Ductwork.logger.debug(
-                msg: "Did not claim pipeline, avoided race condition",
-                pipeline_id: id,
-                pipeline: klass,
-                role: :pipeline_advancer
-              )
-            end
-          else
-            Ductwork.logger.debug(
-              msg: "No pipeline needs advancing",
-              pipeline: klass,
-              role: :pipeline_advancer
-            )
+          Branch.with_latest_claimed(klass) do |branch|
+            branch.advance!
           end
 
           @last_heartbeat_at = Time.current

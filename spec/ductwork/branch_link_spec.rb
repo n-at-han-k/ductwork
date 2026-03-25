@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe Ductwork::BranchJunction do
+RSpec.describe Ductwork::BranchLink do
   describe "validations" do
     it "is invalid if the parent and child branch id tuple is not unique" do
       parent_branch = create(:branch)

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Ductwork
-  class BranchJunction < Ductwork::Record
+  class BranchLink < Ductwork::Record
     belongs_to :parent_branch, class_name: "Ductwork::Branch"
     belongs_to :child_branch, class_name: "Ductwork::Branch"
 

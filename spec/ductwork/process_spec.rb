@@ -38,6 +38,28 @@ RSpec.describe Ductwork::Process do
     end
   end
 
+  describe ".current" do
+    let(:last_heartbeat_at) { Time.current }
+
+    it "returns the process by PID and machine identifier" do
+      process = described_class.create!(
+        pid:,
+        machine_identifier:,
+        last_heartbeat_at:
+      )
+
+      current_process = described_class.current
+
+      expect(current_process).to eq(process)
+    end
+
+    it "raises if no record exists" do
+      expect do
+        described_class.current
+      end.to raise_error(described_class::NotFoundError, "Process #{pid} not found")
+    end
+  end
+
   describe ".report_heartbeat!" do
     it "updates the heartbeat timestamp" do
       last_heartbeat_at = 1.day.ago

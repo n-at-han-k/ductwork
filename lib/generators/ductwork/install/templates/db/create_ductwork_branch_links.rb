@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-class CreateDuctworkBranchJunctions < Ductwork::Migration
+class CreateDuctworkBranchLinks < Ductwork::Migration
   def change
-    create_ductwork_table :ductwork_branch_junctions do |table|
+    create_ductwork_table :ductwork_branch_links do |table|
       belongs_to(
         table,
         :parent_branch,
@@ -20,7 +20,7 @@ class CreateDuctworkBranchJunctions < Ductwork::Migration
       table.timestamps null: false
     end
 
-    add_index :ductwork_branch_junctions,
+    add_index :ductwork_branch_links,
               %w[parent_branch_id child_branch_id],
               unique: true
   end

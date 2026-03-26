@@ -89,11 +89,11 @@ module Ductwork
 
       def create_process!
         Ductwork.wrap_with_app_executor do
-          Ductwork::Process.create!(
+          process = Ductwork::Process.find_or_initialize_by(
             pid: ::Process.pid,
-            machine_identifier: Ductwork::MachineIdentifier.fetch,
-            last_heartbeat_at: Time.current
+            machine_identifier: Ductwork::MachineIdentifier.fetch
           )
+          process.update!(last_heartbeat_at: Time.current)
         end
       end
 

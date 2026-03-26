@@ -90,7 +90,7 @@ module Ductwork
               "Invalid transition type `#{edge[:type]}`"
       end
     rescue StandardError => e
-      advancement.update!(
+      advancement&.update!(
         completed_at: Time.current,
         error_klass: e.class.to_s,
         error_message: e.message,

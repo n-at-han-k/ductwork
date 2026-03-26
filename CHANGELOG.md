@@ -2,6 +2,7 @@
 
 ## [1.0.0] (Unreleased)
 
+- fix: create top-level process record for thread supervisor
 - fix: use safe navigation in rescue when advancing branch
 - fix: use correct column name in migration
 - feat!: advance branches instead of pipelines - BREAKING CHANGE: this completely changes how pipelines are advanced. to migrate let all your current pipelines complete then deploy

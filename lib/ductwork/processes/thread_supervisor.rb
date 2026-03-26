@@ -9,6 +9,7 @@ module Ductwork
         @running_context = Ductwork::RunningContext.new
         @workers = []
 
+        create_or_adopt_process!
         run_hooks_for(:start)
 
         Signal.trap(:INT) { @running_context.shutdown! }
@@ -49,6 +50,7 @@ module Ductwork
         while running_context.running?
           sleep(Ductwork.configuration.supervisor_polling_timeout)
           check_worker_health
+          report_heartbeat!
         end
 
         shutdown
@@ -88,6 +90,7 @@ module Ductwork
         workers.each(&:stop)
         await_threads_graceful_shutdown
         kill_remaining_threads
+        delete_process!
         run_hooks_for(:stop)
       end
 
@@ -127,6 +130,31 @@ module Ductwork
               thread: worker.name
             )
           end
+        end
+      end
+
+      def create_or_adopt_process!
+        pid = ::Process.pid
+        machine_identifier = Ductwork::MachineIdentifier.fetch
+
+        Ductwork.wrap_with_app_executor do
+          process = Ductwork::Process.find_or_initialize_by(pid:, machine_identifier:)
+          process.update!(last_heartbeat_at: Time.current)
+        end
+      end
+
+      def report_heartbeat!
+        Ductwork.wrap_with_app_executor do
+          Ductwork::Process.report_heartbeat!
+        end
+      end
+
+      def delete_process!
+        Ductwork.wrap_with_app_executor do
+          Ductwork::Process.find_by(
+            pid: ::Process.pid,
+            machine_identifier: Ductwork::MachineIdentifier.fetch
+          )&.delete
         end
       end
 

@@ -2,6 +2,7 @@
 
 ## [1.0.0] (Unreleased)
 
+- feat: add process reaper check to supervisors' run loop
 - chore: DRY up process record adoption and creation
 - fix: create or adopt process records in pipeline advancer and job worker
 - fix: create top-level process record for thread supervisor

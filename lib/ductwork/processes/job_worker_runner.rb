@@ -150,10 +150,10 @@ module Ductwork
 
       def delete_process_record!
         Ductwork.wrap_with_app_executor do
-          Ductwork::Process.find_by!(
+          Ductwork::Process.find_by(
             pid: ::Process.pid,
             machine_identifier: Ductwork::MachineIdentifier.fetch
-          ).delete
+          )&.delete
         end
       end
     end

@@ -38,6 +38,7 @@ module Ductwork
         while running_context.running?
           sleep(Ductwork.configuration.supervisor_polling_timeout)
           check_workers
+          reap_process_records
         end
 
         shutdown
@@ -87,6 +88,12 @@ module Ductwork
           msg: "All workers are alive or revived",
           role: :process_supervisor
         )
+      end
+
+      def reap_process_records
+        Ductwork.wrap_with_app_executor do
+          Ductwork::Process.reap_all!(:process_supervisor)
+        end
       end
 
       def terminate_gracefully

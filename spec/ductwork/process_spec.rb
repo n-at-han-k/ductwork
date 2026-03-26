@@ -92,6 +92,38 @@ RSpec.describe Ductwork::Process do
     end
   end
 
+  describe ".reap_all!" do
+    it "deletes old process records" do
+      old_record = create(:process, last_heartbeat_at: 2.minutes.ago)
+      _new_record = create(:process)
+
+      expect do
+        described_class.reap_all!(:thread_supervisor)
+      end.to change(described_class, :count).by(-1)
+
+      expect do
+        old_record.reload
+      end.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it "logs" do
+      create(:process, last_heartbeat_at: 2.minutes.ago)
+      allow(Ductwork.logger).to receive(:debug).and_call_original
+
+      described_class.reap_all!(:process_supervisor)
+
+      expect(Ductwork.logger).to have_received(:debug).with(
+        msg: "Reaping orphaned process records",
+        role: :process_supervisor
+      )
+      expect(Ductwork.logger).to have_received(:debug).with(
+        msg: "Reaped 1 process records",
+        count: 1,
+        role: :process_supervisor
+      )
+    end
+  end
+
   describe ".report_heartbeat!" do
     it "updates the heartbeat timestamp" do
       last_heartbeat_at = 1.day.ago

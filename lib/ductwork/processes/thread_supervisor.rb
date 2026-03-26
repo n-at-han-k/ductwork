@@ -51,6 +51,7 @@ module Ductwork
           sleep(Ductwork.configuration.supervisor_polling_timeout)
           check_worker_health
           report_heartbeat!
+          reap_process_records
         end
 
         shutdown
@@ -142,6 +143,12 @@ module Ductwork
       def report_heartbeat!
         Ductwork.wrap_with_app_executor do
           Ductwork::Process.report_heartbeat!
+        end
+      end
+
+      def reap_process_records
+        Ductwork.wrap_with_app_executor do
+          Ductwork::Process.reap_all!(:thread_supervisor)
         end
       end
 

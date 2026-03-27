@@ -2,6 +2,7 @@
 
 ## [1.0.0] (Unreleased)
 
+- chore: bump rails versions in appraisals file
 - chore: DRY up process record destruction
 - fix: release job availabilities during process reaping
 - fix: use proper association to `ductwork_processes` in `ductwork_availabilities`

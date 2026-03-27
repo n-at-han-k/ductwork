@@ -107,7 +107,7 @@ module Ductwork
         advancers.each(&:stop)
         await_threads_graceful_shutdown
         kill_remaining_threads
-        delete_process!
+        destroy_process_record!
       end
 
       def log_shutting_down
@@ -150,12 +150,9 @@ module Ductwork
         end
       end
 
-      def delete_process!
+      def destroy_process_record!
         Ductwork.wrap_with_app_executor do
-          Ductwork::Process.find_by(
-            pid: ::Process.pid,
-            machine_identifier: Ductwork::MachineIdentifier.fetch
-          )&.delete
+          Ductwork::Process.destroy_current!
         end
       end
     end

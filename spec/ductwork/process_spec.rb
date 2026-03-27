@@ -91,6 +91,19 @@ RSpec.describe Ductwork::Process do
     end
   end
 
+  describe ".destroy_current!" do
+    it "destroys the process record" do
+      process = create(:process, :current)
+
+      expect do
+        described_class.destroy_current!
+      end.to change(described_class, :count).by(-1)
+      expect do
+        process.reload
+      end.to raise_error(ActiveRecord::RecordNotFound)
+    end
+  end
+
   describe ".reap_all!" do
     it "releases associated incomplete branch advancements" do
       process = create(:process, last_heartbeat_at: 2.minutes.ago)

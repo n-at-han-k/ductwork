@@ -70,7 +70,7 @@ module Ductwork
         workers.each do |worker|
           if process_dead?(worker[:pid])
             old_pid = worker[:pid]
-            delete_process_record!(old_pid)
+            destroy_process_record!(old_pid)
             new_pid = fork do
               worker[:block].call(worker[:metadata])
             end
@@ -161,11 +161,11 @@ module Ductwork
         end
       end
 
-      def delete_process_record!(pid)
+      def destroy_process_record!(pid)
         machine_identifier = Ductwork::MachineIdentifier.fetch
 
         Ductwork.wrap_with_app_executor do
-          Ductwork::Process.find_by(pid:, machine_identifier:)&.delete
+          Ductwork::Process.find_by(pid:, machine_identifier:)&.destroy
         end
       end
 

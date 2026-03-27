@@ -36,6 +36,13 @@ module Ductwork
       raise NotFoundError, "Process #{pid} not found"
     end
 
+    def self.destroy_current!
+      pid = ::Process.pid
+      machine_identifier = Ductwork::MachineIdentifier.fetch
+
+      find_by(pid:, machine_identifier:)&.destroy
+    end
+
     def self.reap_all!(role) # rubocop:todo Metrics/AbcSize
       count = 0
 

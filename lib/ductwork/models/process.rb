@@ -36,7 +36,7 @@ module Ductwork
       raise NotFoundError, "Process #{pid} not found"
     end
 
-    def self.reap_all!(role)
+    def self.reap_all!(role) # rubocop:todo Metrics/AbcSize
       count = 0
 
       Ductwork.logger.debug(
@@ -44,7 +44,7 @@ module Ductwork
         role: role
       )
 
-      where("last_heartbeat_at < ?", REAP_THRESHOLD.ago).find_each do |process|
+      where("last_heartbeat_at < ?", REAP_THRESHOLD.ago).find_each do |process| # rubocop:todo Metrics/BlockLength
         Ductwork::Record.transaction do
           locked_process = Ductwork::Process.lock.find_by(id: process.id)
 
@@ -52,6 +52,28 @@ module Ductwork
 
           locked_process.advancements.where(completed_at: nil).find_each do |advancement|
             advancement.transition.branch.release!
+          end
+          availabilities = locked_process.availabilities
+                                         .joins(:execution)
+                                         .merge(Ductwork::Execution.where(completed_at: nil))
+
+          availabilities.find_each do |availability|
+            execution = availability.execution
+            job = execution.job
+            pipeline = job.step.pipeline
+
+            execution.update!(completed_at: Time.current)
+            execution.run&.update!(completed_at: Time.current)
+            execution.create_result!(result_type: "process_crashed")
+
+            new_execution = job.executions.create!(
+              retry_count: execution.retry_count,
+              started_at: Ductwork::Job::FAILED_EXECUTION_TIMEOUT.from_now
+            )
+            new_execution.create_availability!(
+              started_at: Ductwork::Job::FAILED_EXECUTION_TIMEOUT.from_now,
+              pipeline_klass: pipeline.klass
+            )
           end
           locked_process.destroy
         end

@@ -2,6 +2,7 @@
 
 ## [1.0.0] (Unreleased)
 
+- fix: release job availabilities during process reaping
 - fix: use proper association to `ductwork_processes` in `ductwork_availabilities`
 - fix: release branches during process reaping
 - feat: add process reaper check to supervisors' run loop

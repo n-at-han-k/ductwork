@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe Ductwork::Process do
+  let(:be_almost_now) { be_within(1.second).of(Time.current) }
   let(:pid) { ::Process.pid }
   let(:machine_identifier) do
     File.read("/etc/machine-id").strip
@@ -39,8 +40,6 @@ RSpec.describe Ductwork::Process do
   end
 
   describe ".adopt_or_create_current!" do
-    let(:be_almost_now) { be_within(1.second).of(Time.current) }
-
     it "creates a new process record" do
       record = nil
 
@@ -93,7 +92,7 @@ RSpec.describe Ductwork::Process do
   end
 
   describe ".reap_all!" do
-    it "releases associated branches" do
+    it "releases associated incomplete branch advancements" do
       process = create(:process, last_heartbeat_at: 2.minutes.ago)
       advancement = create(:advancement, process:)
       branch = advancement.transition.branch.tap do |b|
@@ -103,6 +102,22 @@ RSpec.describe Ductwork::Process do
       expect do
         described_class.reap_all!(:thread_supervisor)
       end.to change { branch.reload.claimed_for_advancing_at }.to(nil)
+    end
+
+    it "re-enqueues claimed jobs with incomplete executions" do
+      process = create(:process, last_heartbeat_at: 2.minutes.ago)
+      availability = create(:availability, process: process, completed_at: Time.current)
+      execution = availability.execution
+
+      described_class.reap_all!(:thread_supervisor)
+
+      expect(execution.reload.completed_at).to be_present
+      expect(execution.result.result_type).to eq("process_crashed")
+
+      new_execution = execution.job.executions.where.not(id: execution.id).sole
+      expect(new_execution.retry_count).to eq(execution.retry_count)
+      expect(new_execution.availability).to be_present
+      expect(new_execution.availability.completed_at).to be_nil
     end
 
     it "deletes old process records" do

@@ -193,7 +193,9 @@ RSpec.describe Ductwork::Process do
   end
 
   describe "#reap!" do
-    subject(:process) { create(:process, :current) }
+    subject(:process) do
+      create(:process, :current, last_heartbeat_at: 2.minutes.ago)
+    end
 
     it "releases associated incomplete branch advancements" do
       advancement = create(:advancement, process:)

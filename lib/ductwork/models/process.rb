@@ -65,7 +65,7 @@ module Ductwork
       end
     end
 
-    def reap!(role)
+    def reap!(role) # rubocop:todo Metrics/AbcSize
       Ductwork.logger.debug(
         msg: "Reaping orphaned process record #{id}",
         id: id,

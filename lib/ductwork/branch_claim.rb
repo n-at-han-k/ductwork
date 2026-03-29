@@ -2,6 +2,8 @@
 
 module Ductwork
   class BranchClaim
+    attr_reader :transition, :advancement
+
     def initialize(pipeline_klass)
       @pipeline_klass = pipeline_klass
       @claimed_for_advancing_at = nil
@@ -21,10 +23,7 @@ module Ductwork
       end
 
       if id.present?
-        transition = nil
-        advancement = nil
         now = Time.current
-
         rows_updated = Ductwork.wrap_with_app_executor do # rubocop:todo Metrics/BlockLength
           Ductwork::Record.transaction do # rubocop:todo Metrics/BlockLength
             branch_claims = Ductwork::Branch
@@ -33,12 +32,12 @@ module Ductwork
 
             if branch_claims == 1
               branch = Branch.find(id)
-              transition = branch
-                           .transitions
-                           .where(completed_at: nil)
-                           .order(started_at: :desc)
-                           .limit(1)
-                           .first
+              @transition = branch
+                            .transitions
+                            .where(completed_at: nil)
+                            .order(started_at: :desc)
+                            .limit(1)
+                            .first
 
               if transition.present?
                 attrs = {
@@ -55,13 +54,13 @@ module Ductwork
                   .first
                   &.update!(**attrs)
               else
-                transition = branch.transitions.create!(
+                @transition = branch.transitions.create!(
                   in_step: branch.latest_step,
                   started_at: now
                 )
               end
 
-              advancement = transition.advancements.create!(
+              @advancement = transition.advancements.create!(
                 process: Ductwork::Process.current,
                 started_at: now
               )

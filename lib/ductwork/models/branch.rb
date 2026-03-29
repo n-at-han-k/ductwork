@@ -39,11 +39,12 @@ module Ductwork
     class TransitionError < StandardError; end
 
     def self.with_latest_claimed(pipeline_klass)
-      branch, transition, advancement = Ductwork::BranchClaim.new(pipeline_klass).latest
+      branch_claim = Ductwork::BranchClaim.new(pipeline_klass)
+      branch = branch_claim.latest
       succeeded = false
 
       if branch.present?
-        yield branch, transition, advancement
+        yield branch, branch_claim.transition, branch_claim.advancement
 
         succeeded = true
       end

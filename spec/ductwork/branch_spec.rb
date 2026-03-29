@@ -70,7 +70,9 @@ RSpec.describe Ductwork::Branch do
     let(:claim) do
       instance_double(
         Ductwork::BranchClaim,
-        latest: [branch, transition, advancement]
+        latest: branch,
+        transition: transition,
+        advancement: advancement
       )
     end
     let(:branch) do

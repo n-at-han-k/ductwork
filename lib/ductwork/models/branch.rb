@@ -41,28 +41,17 @@ module Ductwork
     def self.with_latest_claimed(pipeline_klass)
       branch_claim = Ductwork::BranchClaim.new(pipeline_klass)
       branch = branch_claim.latest
-      succeeded = false
 
       if branch.present?
         yield branch, branch_claim.transition, branch_claim.advancement
-
-        succeeded = true
       end
     ensure
       if branch.present?
         branch.reload
 
-        attrs = { claimed_for_advancing_at: nil }
-
-        if succeeded
-          attrs[:last_advanced_at] = Time.current
-        end
-
         if branch.advancing?
-          attrs[:status] = "in_progress"
+          branch.release!
         end
-
-        branch.update!(attrs)
       end
     end
 
@@ -99,7 +88,12 @@ module Ductwork
     end
 
     def complete!
-      update!(completed_at: Time.current, status: "completed")
+      update!(
+        completed_at: Time.current,
+        status: "completed",
+        claimed_for_advancing_at: nil,
+        last_advanced_at: Time.current
+      )
 
       Ductwork.logger.info(
         msg: "Branch completed",
@@ -153,6 +147,7 @@ module Ductwork
       Ductwork::Record.transaction do
         latest_step.update!(status: :completed, completed_at: Time.current)
         pipeline.branches.where(status: %w[advancing in_progress]).each(&:halt!)
+        update!(claimed_for_advancing_at: nil, last_advanced_at: Time.current)
         pipeline.halt!
 
         now = Time.current
@@ -183,6 +178,7 @@ module Ductwork
         now = Time.current
         advancement.update!(completed_at: now)
         transition.update!(completed_at: now)
+        release!
       end
     end
 
@@ -322,6 +318,7 @@ module Ductwork
         now = Time.current
         advancement.update!(completed_at: now)
         transition.update!(completed_at: now)
+        release!
       end
     end
 
@@ -349,6 +346,7 @@ module Ductwork
           now = Time.current
           advancement.update!(completed_at: now)
           transition.update!(completed_at: now)
+          release!
         end
       end
     end

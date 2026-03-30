@@ -276,13 +276,22 @@ RSpec.describe Ductwork::Branch do
   end
 
   describe "#complete!" do
-    subject(:branch) { create(:branch, :in_progress) }
+    subject(:branch) do
+      create(:branch, :in_progress, claimed_for_advancing_at: Time.current)
+    end
 
     it "sets the status and timestamp for the branch" do
       expect do
         branch.complete!
       end.to change(branch, :status).from("in_progress").to("completed")
         .and change(branch, :completed_at).to(be_within(1.second).of(Time.current))
+    end
+
+    it "releases the branch" do
+      expect do
+        branch.complete!
+      end.to change(branch, :claimed_for_advancing_at).to(nil)
+        .and change(branch, :last_advanced_at).to be_almost_now
     end
 
     it "logs" do

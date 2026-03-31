@@ -56,6 +56,11 @@ module Ductwork
         migration_template "db/rename_runs_to_attempts.rb",
                            "db/migrate/rename_runs_to_attempts.rb"
       end
+
+      if !Ductwork::Record.connection.table_exists?(:ductwork_runs)
+        migration_template "db/create_ductwork_runs.rb",
+                           "db/migrate/create_ductwork_runs.rb"
+      end
     end
   end
 end

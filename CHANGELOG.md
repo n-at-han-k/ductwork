@@ -2,6 +2,7 @@
 
 ## [1.0.0] (Unreleased)
 
+- feat: add `ductwork_runs` table and model to represent pipeline runs
 - chore: rename `ductwork_runs` to `ductwork_attempts`
 - chore: log when pipeline advancement errors
 - fix: move branch release into main advance transaction

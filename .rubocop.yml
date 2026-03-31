@@ -46,6 +46,9 @@ Metrics/CyclomaticComplexity:
 
 Metrics/MethodLength:
   Max: 40
+  Exclude:
+    - lib/generators/ductwork/install/install_generator.rb
+    - lib/generators/ductwork/update/update_generator.rb
 
 Metrics/PerceivedComplexity:
   Exclude:

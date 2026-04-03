@@ -15,7 +15,9 @@ Rails::Generators.invoke(
   ["--force"],
   destination_root: Rails.root.join("spec", "internal").to_s
 )
-Combustion.initialize! :active_record, :action_controller, :action_view
+Combustion.initialize!(:active_record, :action_controller, :action_view) do
+  config.action_dispatch.show_exceptions = :none
+end
 
 require "rspec/rails"
 

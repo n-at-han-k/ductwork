@@ -5,8 +5,8 @@
     </h1>
 
     <h2>
-      <span class="status-pill big-pill <%= @pipeline.status %>">
-        <%= @pipeline.status.gsub("_", "-") %>
+      <span class="status-pill big-pill <%= @last_run.status %>">
+        <%= @last_run.status.gsub("_", "-") %>
       </span>
     </h2>
   </div>
@@ -30,34 +30,34 @@
         <div>
           <label>Runtime</label>
           <span>
-            <% if @pipeline.completed_at.nil? %>
-              <div data-started-at=<%= @pipeline.started_at.iso8601 %>>
+            <% if @last_run.completed_at.nil? %>
+              <div data-started-at=<%= @last_run.started_at.iso8601 %>>
                 <span id="elapsed-timer">0h 0m 0s</span>
               </div>
             <% else %>
-              <%= formatted_time_distance(@pipeline.started_at, @pipeline.completed_at) %>
+              <%= formatted_time_distance(@last_run.started_at, @last_run.completed_at) %>
             <% end %>
           </span>
         </div>
         <div class="metric-heading">
           <label>Triggered At</label>
           <span>
-            <%= @pipeline.triggered_at.iso8601(3) %>
+            <%= @last_run.triggered_at.iso8601(3) %>
           </span>
         </div>
       </div>
 
       <div>
         <div class="metric-heading">
-          <label>Last Advanced At</label>
+          <label>Started At</label>
           <span>
-            <%= @pipeline.last_advanced_at.iso8601(3) %>
+            <%= @last_run.started_at.iso8601(3) %>
           </span>
         </div>
         <div>
           <label>Completed At</label>
           <span>
-            <%= @pipeline.completed_at&.iso8601(3) %>
+            <%= @last_run.completed_at&.iso8601(3) %>
           </span>
         </div>
       </div>
@@ -66,12 +66,12 @@
     <div style="margin-top: 1rem;">
       <label>Definition</label>
       <code style="width: 100%;">
-        <%= @pipeline.parsed_definition %>
+        <%= @last_run.parsed_definition %>
       </code>
     </div>
   </article>
 
-  <h3>Steps (<%= @pipeline.steps.count %>)</h3>
+  <h3>Steps (<%= @last_run.steps.count %>)</h3>
 
   <div class="separate-content">
     <div class="filter-group">
@@ -245,7 +245,7 @@
                       <td><%= execution.retry_count + 1 %></td>
                       <td><%= execution.started_at.strftime("%H:%M:%S.%3N") %></td>
                       <td><%= execution.availability.completed_at&.strftime("%H:%M:%S.%3N") %></td>
-                      <td><%= execution.run&.started_at&.strftime("%H:%M:%S.%3N") %></td>
+                      <td><%= execution.attempt&.started_at&.strftime("%H:%M:%S.%3N") %></td>
                       <td><%= execution.completed_at&.strftime("%H:%M:%S.%3N") %></td>
                       <td>
                         <% if execution.result.present? && execution.result.failure? %>

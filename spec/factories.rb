@@ -44,7 +44,7 @@ FactoryBot.define do
   factory :job, class: "Ductwork::Job" do
     started_at { Time.current }
     klass { "MyStepA" }
-    input_args { 1 }
+    input_args { { args: [1] }.to_json }
     step
   end
 
@@ -66,6 +66,11 @@ FactoryBot.define do
         Socket.gethostname
       end
     end
+  end
+
+  factory :result, class: "Ductwork::Result" do
+    result_type { Ductwork::Result.result_types.values.sample }
+    execution
   end
 
   factory :run, class: "Ductwork::Run" do

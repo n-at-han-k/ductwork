@@ -160,7 +160,7 @@ RSpec.describe Ductwork::Branch do
       it "completes the pipeline and run" do
         expect do
           branch.advance!(spy, spy)
-        end.to change { run.reload.pipeline.status }.to("completed")
+        end.to change { run.reload.status }.to("completed")
           .and change(run, :completed_at).to(be_almost_now)
       end
     end

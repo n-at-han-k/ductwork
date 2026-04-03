@@ -2,6 +2,7 @@
 
 ## [1.0.0] (Unreleased)
 
+- fix: create `ductwork_runs` records opaquely in rspec test helpers
 - feat: associate `branches`, `steps`, and `tuples` to `runs` instead of `pipelines`
 - feat: add `ductwork_runs` table and model to represent pipeline runs
 - chore: rename `ductwork_runs` to `ductwork_attempts`

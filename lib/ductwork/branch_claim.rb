@@ -34,8 +34,7 @@ module Ductwork
         Ductwork::Branch
           .in_progress
           .where(pipeline_klass:, claimed_for_advancing_at:)
-          .where(steps: Ductwork::Step.where(status: :advancing))
-          .where.not(steps: Ductwork::Step.where.not(status: %w[advancing completed]))
+          .where(steps: Ductwork::Step.where(status: %w[advancing failed]))
           .order(:last_advanced_at)
           .limit(1)
           .pluck(:id)

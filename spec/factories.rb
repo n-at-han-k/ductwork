@@ -108,6 +108,10 @@ FactoryBot.define do
       status { "advancing" }
     end
 
+    trait :failed do
+      status { "failed" }
+    end
+
     trait :completed do
       status { "completed" }
       completed_at { Time.current }

@@ -36,6 +36,19 @@ RSpec.describe Ductwork::BranchClaim do
         expect(record.claimed_for_advancing_at).to be_present
       end
 
+      context "when the branch's latest step is failed" do
+        before do
+          Ductwork::Step.where(branch:).destroy_all
+          create(:step, :failed, branch:)
+        end
+
+        it "returns the branch" do
+          record = claim.latest
+
+          expect(record).to eq(branch)
+        end
+      end
+
       context "when there are orphaned advancements" do
         let(:transition) { create(:transition, branch:) }
         let(:advancement) { create(:advancement, transition:) }

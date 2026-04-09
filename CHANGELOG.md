@@ -2,6 +2,7 @@
 
 ## [1.0.0] (Unreleased)
 
+- feat: update branch claim query
 - feat: implement `Ductwork::Pipeline#revive!`
 - chore: add `source_step_id` column on `ductwork_steps`
 - fix: protect against null error backtraces for job results

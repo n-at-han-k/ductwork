@@ -110,7 +110,11 @@ module Ductwork
     end
 
     def halt!
-      halted!
+      update!(
+        status: "halted",
+        claimed_for_advancing_at: nil,
+        last_advanced_at: Time.current
+      )
 
       Ductwork.logger.info(
         msg: "Branch halted",
@@ -136,30 +140,36 @@ module Ductwork
     def complete_branch_and_pipeline(transition, advancement)
       Ductwork::Record.transaction do
         run.lock!
+
         latest_step.update!(status: :completed, completed_at: Time.current)
-
-        if run.branches.where.not(id:).where.not(status: :completed).none?
-          run.pipeline.complete!
-        end
-
         complete!
 
         now = Time.current
         advancement.update!(completed_at: now)
         transition.update!(completed_at: now)
+
+        return if run.halted? || run.completed?
+
+        if run.branches.where.not(id:).where.not(status: :completed).none?
+          run.pipeline.complete!
+        end
       end
     end
 
     def halt_branch_and_pipeline!(transition, advancement)
       Ductwork::Record.transaction do
+        run.lock!
+
         latest_step.update!(status: :completed, completed_at: Time.current)
-        run.branches.where(status: %w[advancing in_progress]).each(&:halt!)
-        update!(claimed_for_advancing_at: nil, last_advanced_at: Time.current)
-        run.pipeline.halt!
+        halt!
 
         now = Time.current
         advancement.update!(completed_at: now)
         transition.update!(completed_at: now)
+
+        return if run.halted? || run.completed?
+
+        run.pipeline.halt!
       end
     end
 
@@ -171,7 +181,7 @@ module Ductwork
 
       Ductwork::Record.transaction do
         latest_step.update!(status: :completed, completed_at: Time.current)
-        # NOTE: we stay on the same branch for `chain`-ing
+        # NOTE: we stay on the same branch for sequential `chain`-ing
         next_step = steps.create!(
           run: run,
           node: node,

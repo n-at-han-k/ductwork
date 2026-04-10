@@ -295,12 +295,19 @@ RSpec.describe Ductwork::Branch do
   end
 
   describe "#halt!" do
-    subject(:branch) { create(:branch, :in_progress) }
+    subject(:branch) { create(:branch, :in_progress, claimed_for_advancing_at: Time.current) }
 
     it "sets the status and timestamp for the branch" do
       expect do
         branch.halt!
       end.to change(branch, :status).from("in_progress").to("halted")
+    end
+
+    it "releases the branch" do
+      expect do
+        branch.halt!
+      end.to change(branch, :claimed_for_advancing_at).to(nil)
+        .and change(branch, :last_advanced_at).to be_almost_now
     end
 
     it "logs" do

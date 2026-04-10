@@ -116,13 +116,5 @@ RSpec.describe Ductwork::Branch, "#advance!" do
       end.not_to change(Ductwork::Step, :count)
       expect(run.pipeline.reload).to be_halted
     end
-
-    it "halts all other branches" do
-      create(:branch, :in_progress, run:)
-      expect do
-        branch.advance!(transition, advancement)
-      end.not_to change(Ductwork::Step, :count)
-      expect(run.branches).to all(be_halted)
-    end
   end
 end

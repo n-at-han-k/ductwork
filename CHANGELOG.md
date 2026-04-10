@@ -2,6 +2,7 @@
 
 ## [1.0.0] (Unreleased)
 
+- fix: check for terminal status before setting status on pipeline
 - chore: do not halt pipeline from job worker
 - feat: update branch claim query
 - feat: implement `Ductwork::Pipeline#revive!`

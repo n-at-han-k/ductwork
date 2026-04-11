@@ -151,7 +151,7 @@ module Ductwork
           error_backtrace: e.backtrace.join("\n")
         )
 
-        if e.is_a?(Ductwork::Branch::TransitionError)
+        if e.is_a?(Ductwork::Branch::TransitionError) || too_many_failed_attempts?
           halt!
           run.resolve_terminal_state!
         end
@@ -163,6 +163,16 @@ module Ductwork
         error_klass: e.class.to_s,
         error_message: e.message
       )
+    end
+
+    def too_many_failed_attempts?
+      max = Ductwork.configuration.pipeline_advancer_max_retry
+
+      transitions
+        .joins(:advancements)
+        .where(in_step_id: latest_step.id)
+        .where.not(ductwork_advancements: { error_klass: nil })
+        .count >= max
     end
 
     def complete_branch_and_pipeline(transition, advancement)

@@ -127,7 +127,7 @@ RSpec.describe Ductwork::Branch do
   describe "#advance!" do
     subject(:branch) { create(:branch, :in_progress, run:) }
 
-    let(:run) { create(:run, status: "in_progress", definition: definition) }
+    let(:run) { create(:run, :in_progress, definition:) }
     let(:step) { create(:step, :advancing, branch:, run:) }
     let(:definition) do
       {
@@ -227,7 +227,7 @@ RSpec.describe Ductwork::Branch do
 
     context "when there is an error while advancing" do
       before do
-        allow(run).to receive(:resolve_terminal_state!).and_raise("bad times")
+        allow(run).to receive(:parsed_definition).and_raise("bad times")
       end
 
       it "sets error metadata on the advancement record" do
@@ -254,6 +254,33 @@ RSpec.describe Ductwork::Branch do
           error_klass: "RuntimeError",
           error_message: "bad times"
         )
+      end
+
+      context "when advancement retries are exhausted" do
+        before do
+          transition = create(
+            :transition,
+            in_step: step,
+            out_step: nil,
+            branch: branch
+          )
+          create(:advancement, :errored, transition:)
+          Ductwork.configuration.pipeline_advancer_max_retry = 1
+        end
+
+        it "halts the branch" do
+          expect do
+            branch.advance!(spy, spy)
+          end.to change(branch, :status).from("in_progress").to("halted")
+        end
+
+        it "resolves the terminal state on the run" do
+          allow(run).to receive(:resolve_terminal_state!).and_call_original
+
+          branch.advance!(spy, spy)
+
+          expect(run).to have_received(:resolve_terminal_state!)
+        end
       end
     end
 

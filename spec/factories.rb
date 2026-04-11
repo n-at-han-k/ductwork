@@ -5,6 +5,12 @@ FactoryBot.define do
     started_at { Time.current }
     process
     transition
+
+    trait :errored do
+      error_klass { "StandardError" }
+      error_message { "bad times" }
+      error_backtrace { "(main)" }
+    end
   end
 
   factory :attempt, class: "Ductwork::Attempt" do

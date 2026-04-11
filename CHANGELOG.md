@@ -2,6 +2,7 @@
 
 ## [1.0.0] (Unreleased)
 
+- feat: respect pipeline advancer max retry configuration
 - feat: add pipeline advancer max retry configuration
 - feat: properly set pipeline/run terminal states
 - fix: check for terminal status before setting status on pipeline

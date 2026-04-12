@@ -144,16 +144,31 @@ module Ductwork
       end
     rescue StandardError => e
       Ductwork::Record.transaction do
-        advancement&.update!(
-          completed_at: Time.current,
-          error_klass: e.class.to_s,
-          error_message: e.message,
-          error_backtrace: e.backtrace.join("\n")
-        )
-
         if e.is_a?(Ductwork::Branch::TransitionError) || too_many_failed_attempts?
+          latest_step.update!(status: :completed, completed_at: Time.current)
+
+          now = Time.current
+          advancement&.update!(
+            completed_at: now,
+            error_klass: e.class.to_s,
+            error_message: e.message,
+            error_backtrace: e.backtrace.join("\n")
+          )
+          transition.update!(completed_at: now)
           halt!
           run.resolve_terminal_state!
+        else
+          # NOTE: since the transaction rolled back from the error the step is
+          # back in the `advancing` status so we don't need to set it, the
+          # branch also gets released via the `ensure` block in the claim and
+          # advancements get created on branch claim so we only need to fail
+          # the current advancement.
+          advancement&.update!(
+            completed_at: Time.current,
+            error_klass: e.class.to_s,
+            error_message: e.message,
+            error_backtrace: e.backtrace.join("\n")
+          )
         end
       end
 

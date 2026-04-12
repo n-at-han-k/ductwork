@@ -226,14 +226,14 @@ RSpec.describe Ductwork::Branch do
     end
 
     context "when there is an error while advancing" do
+      let(:transition) { create(:transition, branch:) }
+      let(:advancement) { create(:advancement, transition:) }
+
       before do
         allow(run).to receive(:parsed_definition).and_raise("bad times")
       end
 
       it "sets error metadata on the advancement record" do
-        transition = create(:transition, branch:)
-        advancement = create(:advancement, transition:)
-
         branch.advance!(transition, advancement)
 
         updated_advancement = branch.transitions.sole.advancements.sole
@@ -268,10 +268,23 @@ RSpec.describe Ductwork::Branch do
           Ductwork.configuration.pipeline_advancer_max_retry = 1
         end
 
+        it "sets the step to completed" do
+          expect do
+            branch.advance!(spy, spy)
+          end.to change { step.reload.status }.from("advancing").to("completed")
+            .and change(step, :completed_at).to(be_almost_now)
+        end
+
         it "halts the branch" do
           expect do
             branch.advance!(spy, spy)
           end.to change(branch, :status).from("in_progress").to("halted")
+        end
+
+        it "completes the transition" do
+          expect do
+            branch.advance!(transition, spy)
+          end.to change(transition, :completed_at).to(be_almost_now)
         end
 
         it "resolves the terminal state on the run" do
@@ -305,6 +318,13 @@ RSpec.describe Ductwork::Branch do
         expect(advancement.error_klass).to eq("Ductwork::Branch::TransitionError")
         expect(advancement.error_message).to eq("Invalid transition type `bogus`")
         expect(advancement.error_backtrace).to be_present
+      end
+
+      it "sets the step to completed" do
+        expect do
+          branch.advance!(spy, spy)
+        end.to change { step.reload.status }.from("advancing").to("completed")
+          .and change(step, :completed_at).to(be_almost_now)
       end
 
       it "halts the branch" do

@@ -245,25 +245,25 @@ module Ductwork
 
     def collapse_branch(edge, transition, advancement) # rubocop:todo Metrics
       parent_branch_id = parent_junctions.pick(:parent_branch_id)
-      node = latest_step.node
 
       Ductwork::Record.transaction do # rubocop:todo Metrics/BlockLength
         # NOTE: lock the parent branch rather than the whole pipeline run
         # because at-most we're only coordinating across child branches of the
         # parent branch
         Ductwork::Branch.find(parent_branch_id).lock!
+        node = latest_step.node
         latest_step.update!(status: :completed, completed_at: Time.current)
         complete!
 
         sibling_ids = Ductwork::BranchLink
                       .where(parent_branch_id:)
                       .pluck(:child_branch_id)
-        siblings_completed = Ductwork::Step
-                             .where(branch_id: sibling_ids, node: node)
-                             .where.not(status: :completed)
-                             .none?
+        all_siblings_completed = Ductwork::Branch
+                                 .where(id: sibling_ids)
+                                 .where.not(status: :completed)
+                                 .none?
 
-        if siblings_completed
+        if all_siblings_completed
           input_arg = Ductwork::Job
                       .joins(:step)
                       .where(ductwork_steps: { branch_id: sibling_ids, node: node })
@@ -271,7 +271,7 @@ module Ductwork
           next_node = edge[:to].sole
           klass = run.parsed_definition.dig(:edges, next_node, :klass)
           started_at = Time.current
-          branch = run.branches.create!(
+          next_branch = run.branches.create!(
             started_at: started_at,
             status: "in_progress",
             last_advanced_at: started_at,
@@ -280,12 +280,12 @@ module Ductwork
 
           sibling_ids.each do |sibling_id|
             Ductwork::BranchLink
-              .create!(parent_branch_id: sibling_id, child_branch_id: branch.id)
+              .create!(parent_branch_id: sibling_id, child_branch_id: next_branch.id)
           end
 
-          next_step = branch.steps.create!(
+          next_step = next_branch.steps.create!(
             run: run,
-            branch: branch,
+            branch: next_branch,
             node: next_node,
             klass: klass,
             status: "in_progress",
@@ -298,6 +298,7 @@ module Ductwork
         now = Time.current
         advancement.update!(completed_at: now)
         transition.update!(completed_at: now)
+        run.resolve_terminal_state!
       end
     end
 
@@ -315,21 +316,20 @@ module Ductwork
         sibling_ids = Ductwork::BranchLink
                       .where(parent_branch_id:)
                       .pluck(:child_branch_id)
-        nodes = Ductwork::Branch.where(id: sibling_ids).map { |b| b.latest_step.node }
-        siblings_completed = Ductwork::Step
-                             .where(branch_id: sibling_ids, node: nodes)
-                             .where.not(status: :completed)
-                             .none?
+        sibling_branches = Ductwork::Branch.where(id: sibling_ids)
+        all_siblings_completed = sibling_branches
+                                 .where.not(status: :completed)
+                                 .none?
 
-        if siblings_completed
+        if all_siblings_completed
+          final_step_ids = sibling_branches.map { |b| b.latest_step.id }
           input_arg = Ductwork::Job
-                      .joins(:step)
-                      .where(ductwork_steps: { branch_id: sibling_ids, node: nodes })
+                      .where(step_id: final_step_ids)
                       .map(&:return_value)
           next_node = edge[:to].sole
           klass = run.parsed_definition.dig(:edges, next_node, :klass)
           started_at = Time.current
-          branch = run.branches.create!(
+          next_branch = run.branches.create!(
             started_at: started_at,
             status: "in_progress",
             last_advanced_at: started_at,
@@ -338,12 +338,12 @@ module Ductwork
 
           sibling_ids.each do |sibling_id|
             Ductwork::BranchLink
-              .create!(parent_branch_id: sibling_id, child_branch_id: branch.id)
+              .create!(parent_branch_id: sibling_id, child_branch_id: next_branch.id)
           end
 
-          next_step = branch.steps.create!(
+          next_step = next_branch.steps.create!(
             run: run,
-            branch: branch,
+            branch: next_branch,
             node: next_node,
             klass: klass,
             status: "in_progress",
@@ -356,6 +356,7 @@ module Ductwork
         now = Time.current
         advancement.update!(completed_at: now)
         transition.update!(completed_at: now)
+        run.resolve_terminal_state!
       end
     end
 

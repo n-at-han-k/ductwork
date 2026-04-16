@@ -96,4 +96,47 @@ RSpec.describe Ductwork::Branch, "#advance" do
     expect(transition.completed_at).to be_almost_now
     expect(advancement.completed_at).to be_almost_now
   end
+
+  context "when a sibling branch is halted" do
+    let(:pipeline) do
+      run.pipeline.tap do |p|
+        p.update!(status: "in_progress", klass: "MyPipeline")
+      end
+    end
+
+    before do
+      halted_branch = create(:branch, :halted, run:)
+      create(
+        :step,
+        :completed,
+        node: "MyStepC.2",
+        klass: "MyStepC",
+        branch: halted_branch,
+        run: run
+      )
+      Ductwork::BranchLink.create!(
+        parent_branch: parent_branch,
+        child_branch: halted_branch
+      )
+    end
+
+    it "does not enqueue the downstream combine step" do
+      expect do
+        branch.advance!(transition, advancement)
+      end.to not_change(Ductwork::Step, :count)
+    end
+
+    it "completes the current branch" do
+      expect do
+        branch.advance!(transition, advancement)
+      end.to change(branch, :status).from("in_progress").to("completed")
+    end
+
+    it "halts the run via resolve_terminal_state!" do
+      expect do
+        branch.advance!(transition, advancement)
+      end.to change { run.reload.status }.from("in_progress").to("halted")
+        .and change { pipeline.reload.status }.from("in_progress").to("halted")
+    end
+  end
 end

@@ -2,6 +2,7 @@
 
 ## [1.0.0] (Unreleased)
 
+- fix: only use `unique_by` options for non-MySQL db adapters
 - feat: add mysql and postgresql databases to CI test matrix
 - fix: don't use partial indexes for MySQL
 - fix: adopt or create process record when reporting heartbeat

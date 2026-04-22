@@ -28,22 +28,16 @@ module Ductwork
         first_set_at: Time.current,
         last_set_at: Time.current,
       }
-      opts = if Ductwork::Tuple.connection.adapter_name.match?(/mysql/i)
-               {}
-             else
-               { unique_by: %i[run_id key] }
-             end
+      unique_by = %i[run_id key]
 
       if overwrite
         Ductwork.wrap_with_app_executor do
-          Ductwork::Tuple.upsert(attributes, **opts)
+          Ductwork::Tuple.upsert(attributes, unique_by:)
         end
       else
-        result = Ductwork.wrap_with_app_executor do
-          Ductwork::Tuple.insert(attributes, **opts)
-        end
-
-        if result.rows.none?
+        Ductwork.wrap_with_app_executor do
+          Ductwork::Tuple.create!(attributes)
+        rescue ActiveRecord::RecordNotUnique
           raise Ductwork::Context::OverwriteError, "Can only set value once"
         end
       end

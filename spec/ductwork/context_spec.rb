@@ -79,7 +79,7 @@ RSpec.describe Ductwork::Context do
       context.set("key", "value")
 
       expect do
-        context.set("key", "value")
+        context.set("key", "value2")
       end.to raise_error(described_class::OverwriteError, "Can only set value once")
     end
 

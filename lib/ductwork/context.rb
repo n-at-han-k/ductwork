@@ -28,7 +28,7 @@ module Ductwork
         first_set_at: Time.current,
         last_set_at: Time.current,
       }
-      opts = if Ductwork::Tuple.connection.adapter_name == "MySQL2"
+      opts = if Ductwork::Tuple.connection.adapter_name.match?(/mysql/i)
                {}
              else
                { unique_by: %i[run_id key] }

@@ -60,7 +60,7 @@ RSpec.describe Ductwork::Process do
     end
 
     it "updates the last heart timestamp" do
-      existing_record = create(:process, :current)
+      existing_record = create(:process, :current, last_heartbeat_at: 5.seconds.ago)
 
       expect do
         described_class.adopt_or_create_current!

@@ -3,7 +3,7 @@
 module Ductwork
   module Processes
     class PipelineAdvancer
-      attr_reader :thread, :last_heartbeat_at, :pipeline
+      attr_reader :thread, :last_heartbeat_at, :branch
 
       def initialize(klass, index = nil)
         @klass = klass
@@ -56,6 +56,7 @@ module Ductwork
 
         while running_context.running?
           Branch.with_latest_claimed(klass) do |branch, transition, advancement|
+            @branch = branch
             branch.advance!(transition, advancement)
           end
 

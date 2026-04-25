@@ -17,6 +17,6 @@ class CreateDuctworkTuples < Ductwork::Migration
       table.timestamps null: false
     end
 
-    add_index :ductwork_tuples, %i[key run_id], unique: true
+    add_index :ductwork_tuples, %i[run_id key], unique: true
   end
 end

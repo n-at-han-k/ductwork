@@ -3,23 +3,24 @@
 module Ductwork
   class PipelinesController < Ductwork::ApplicationController
     def index
-      @pipelines = query_pipelines
+      @runs = query_pipeline_runs
       @klasses = Ductwork::Pipeline.group(:klass).pluck(:klass).sort
       @statuses = Ductwork::Pipeline.statuses.keys
     end
 
     def show
       @pipeline = Ductwork::Pipeline.find(params[:id])
+      @last_run = @pipeline.runs.order(started_at: :desc).first
       @per_page = 10
       @steps = query_steps
-      @klasses = @pipeline.steps.group(:klass).pluck(:klass).sort
+      @klasses = @last_run.steps.group(:klass).pluck(:klass).sort
       @statuses = Ductwork::Step.statuses.keys
     end
 
     private
 
     def query_steps
-      @pipeline
+      @last_run
         .steps
         .then(&method(:filter_by_klass))
         .then(&method(:filter_by_status))

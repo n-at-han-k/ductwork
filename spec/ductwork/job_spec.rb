@@ -37,26 +37,34 @@ RSpec.describe Ductwork::Job do
   describe ".claim_latest" do
     let(:availability) { create(:availability) }
     let(:execution) { availability.execution }
-    let(:klass) { execution.job.step.pipeline.klass }
+    let(:klass) { execution.job.step.run.pipeline_klass }
+    let(:process) { create(:process, :current) }
+
+    before do
+      process
+      availability.update!(pipeline_klass: klass)
+    end
+
+    it "calls the job claim class" do
+      claim = instance_double(Ductwork::JobClaim, latest: nil)
+      allow(Ductwork::JobClaim).to receive(:new).and_return(claim)
+
+      described_class.claim_latest(klass)
+
+      expect(Ductwork::JobClaim).to have_received(:new).with(klass)
+      expect(claim).to have_received(:latest)
+    end
 
     it "updates the the availability record" do
-      be_almost_now = be_within(1.second).of(Time.current)
-
       expect do
         described_class.claim_latest(klass)
       end.to change { availability.reload.completed_at }.from(nil).to(be_almost_now)
-        .and change(availability, :process_id).from(nil).to(::Process.pid)
-    end
-
-    it "updates the execution record" do
-      expect do
-        described_class.claim_latest(klass)
-      end.to change { execution.reload.process_id }.from(nil).to(::Process.pid)
+        .and change(availability, :process_id).from(nil).to(process.id)
     end
 
     it "only claims jobs for the specified pipeline klass" do
       other_availability = create(:availability)
-      pipeline = other_availability.execution.job.step.pipeline
+      pipeline = other_availability.execution.job.step.run.pipeline
 
       expect do
         described_class.claim_latest(pipeline.class.name)
@@ -73,14 +81,17 @@ RSpec.describe Ductwork::Job do
 
     it "changes waiting pipeline and step statuses to in-progress" do
       step = execution.job.step
-      pipeline = step.pipeline
+      run = step.run
+      pipeline = run.pipeline
 
       step.update!(status: "waiting")
+      run.update!(status: "waiting")
       pipeline.update!(status: "waiting")
 
       expect do
         described_class.claim_latest(klass)
       end.to change { pipeline.reload.status }.from("waiting").to("in_progress")
+        .and change { run.reload.status }.from("waiting").to("in_progress")
         .and change { step.reload.status }.from("waiting").to("in_progress")
     end
   end
@@ -97,7 +108,7 @@ RSpec.describe Ductwork::Job do
 
       job = described_class.sole
       expect(job.klass).to eq("MyFirstStep")
-      expect(job.started_at).to be_within(1.second).of(Time.current)
+      expect(job.started_at).to be_almost_now
       expect(job.completed_at).to be_nil
       expect(job.input_args).to eq(JSON.dump({ args: [args] }))
       expect(job.output_payload).to be_nil
@@ -111,7 +122,7 @@ RSpec.describe Ductwork::Job do
 
       job = described_class.sole
       execution = job.executions.sole
-      expect(execution.started_at).to be_within(1.second).of(Time.current)
+      expect(execution.started_at).to be_almost_now
       expect(execution.completed_at).to be_nil
     end
 
@@ -122,147 +133,44 @@ RSpec.describe Ductwork::Job do
 
       execution = Ductwork::Execution.sole
       availability = execution.availability
-      expect(availability.started_at).to be_within(1.second).of(Time.current)
+      expect(availability.started_at).to be_almost_now
       expect(availability.completed_at).to be_nil
     end
   end
 
-  describe "#execute!" do
-    subject(:job) do
-      described_class.create!(klass:, started_at:, input_args:, step:)
+  describe "#execution_crashed!" do
+    subject(:job) { create(:job) }
+
+    let(:execution) { create(:execution, job:) }
+
+    it "completes the execution" do
+      expect do
+        job.execution_crashed!(execution)
+      end.to change { execution.reload.completed_at }.to(be_almost_now)
     end
 
-    let(:klass) { "MyFirstStep" }
-    let(:started_at) { Time.current }
-    let(:input_args) { JSON.dump({ args: 1 }) }
-    let(:step) { create(:step, status: :in_progress) }
-    let(:pipeline) { step.pipeline }
-    let!(:execution) { create(:execution, job:) }
-
-    it "deserializes the step constant, initializes, and executes it" do
-      user_step = instance_double(MyFirstStep, execute: nil)
-      allow(MyFirstStep).to receive(:build_for_execution).and_return(user_step)
-
-      job.execute(pipeline)
-
-      expect(MyFirstStep).to have_received(:build_for_execution).with(pipeline.id, 1)
-      expect(user_step).to have_received(:execute)
-    end
-
-    it "updates the job record with the output payload" do
-      payload = JSON.dump(payload: "return_value")
+    it "completes the attempt if it exists" do
+      attempt = create(:attempt, execution:)
 
       expect do
-        job.execute(pipeline)
-      end.to change(job, :output_payload).from(nil).to(payload)
-        .and change(job, :completed_at).from(nil).to(be_within(1.second).of(Time.current))
+        job.execution_crashed!(execution)
+      end.to change { attempt.reload.completed_at }.to(be_almost_now)
     end
 
-    it "creates a run record" do
+    it "creates a 'process crashed' result record" do
       expect do
-        job.execute(pipeline)
-      end.to change(Ductwork::Run, :count).by(1)
-      run = Ductwork::Run.sole
-      expect(run.started_at).to be_within(1.second).of(Time.current)
-      expect(run.completed_at).to be_within(1.second).of(Time.current)
-    end
-
-    it "updates the timestamp on the execution" do
-      be_almost_now = be_within(1.second).of(Time.current)
-
-      expect do
-        job.execute(pipeline)
-      end.to change { execution.reload.completed_at }.from(nil).to(be_almost_now)
-    end
-
-    it "creates a success result record when execution succeeds" do
-      expect do
-        job.execute(pipeline)
+        job.execution_crashed!(execution)
       end.to change(Ductwork::Result, :count).by(1)
-      result = Ductwork::Result.sole
-      expect(result.result_type).to eq("success")
+      expect(execution.result.result_type).to eq("process_crashed")
     end
 
-    it "marks the step as 'advancing' when the job execution completes" do
-      expect do
-        job.execute(pipeline)
-      end.to change { step.reload.status }.from("in_progress").to("advancing")
-    end
-
-    it "does not mark the step as 'advancing' if the job execution raises" do
-      user_step = instance_double(MyFirstStep)
-      allow(user_step).to receive(:execute).and_raise(StandardError, "bad times")
-      allow(MyFirstStep).to receive(:build_for_execution).and_return(user_step)
+    it "creates new execution and availability records" do
+      execution
 
       expect do
-        job.execute(pipeline)
-      end.not_to change { step.reload.status }.from("in_progress")
-    end
-
-    context "when execution fails" do
-      before do
-        user_step = instance_double(MyFirstStep)
-        allow(user_step).to receive(:execute).and_raise(StandardError, "bad times")
-        allow(MyFirstStep).to receive(:build_for_execution).and_return(user_step)
-      end
-
-      it "creates a failure result record" do
-        expect do
-          expect do
-            job.execute(pipeline)
-          end.not_to raise_error
-        end.to change(Ductwork::Result, :count).by(1)
-        result = Ductwork::Result.sole
-        expect(result.result_type).to eq("failure")
-        expect(result.error_klass).to eq("StandardError")
-        expect(result.error_message).to eq("bad times")
-        expect(result.error_backtrace).to be_present
-      end
-
-      it "creates a new future available execution" do
-        expect do
-          job.execute(pipeline)
-        end.to change(Ductwork::Execution, :count).by(1)
-          .and change(Ductwork::Availability, :count).by(1)
-        execution = job.executions.last
-        expect(execution.retry_count).to eq(1)
-        expect(execution.started_at).to be_within(1.second).of(10.seconds.from_now)
-        expect(execution.availability.started_at).to be_within(1.second).of(10.seconds.from_now)
-      end
-
-      context "when retries are exhausted" do
-        let(:on_halt_step) { instance_double(MyHaltStep, execute: nil) }
-
-        before do
-          pipeline.update!(
-            status: "in_progress",
-            definition: { metadata: { on_halt: { klass: "MyHaltStep" } } }.to_json
-          )
-          pipeline.in_progress!
-          create(:execution, retry_count: 2, job: step.job)
-          allow(MyHaltStep).to receive(:new).and_return(on_halt_step)
-          Ductwork.configuration.job_worker_max_retry = 2
-        end
-
-        it "marks the pipeline as halted" do
-          expect do
-            job.execute(pipeline)
-          end.to change { pipeline.reload.status }.to("halted")
-        end
-
-        it "marks the step as failed" do
-          expect do
-            job.execute(pipeline)
-          end.to change { step.reload.status }.from("in_progress").to("failed")
-        end
-
-        it "calls the on halt class if one is configured in the definition" do
-          job.execute(pipeline)
-
-          expect(MyHaltStep).to have_received(:new)
-          expect(on_halt_step).to have_received(:execute)
-        end
-      end
+        job.execution_crashed!(execution)
+      end.to change(Ductwork::Execution, :count).by(1)
+        .and change(Ductwork::Availability, :count).by(1)
     end
   end
 

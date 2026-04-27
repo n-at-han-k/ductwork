@@ -3,94 +3,78 @@
 module Ductwork
   module Processes
     class PipelineAdvancer
-      def initialize(running_context, klass)
-        @running_context = running_context
+      attr_reader :thread, :last_heartbeat_at, :branch
+
+      def initialize(klass, index = nil)
         @klass = klass
+        @index = index || 0
+        @running_context = Ductwork::RunningContext.new
+        @last_heartbeat_at = Time.current
+        @thread = nil
       end
 
-      def run # rubocop:todo Metrics/AbcSize, Metrics/MethodLength
-        run_hooks_for(:start)
+      def start
+        @thread = Thread.new { work_loop }
+        @thread.name = name
+      end
 
-        while running_context.running?
-          id = Ductwork.wrap_with_app_executor do
-            Ductwork::Pipeline
-              .in_progress
-              .where(klass: klass, claimed_for_advancing_at: nil)
-              .where(steps: Ductwork::Step.where(status: :advancing))
-              .where.not(steps: Ductwork::Step.where.not(status: %w[advancing completed]))
-              .order(:last_advanced_at)
-              .limit(1)
-              .pluck(:id)
-              .first
-          end
+      alias restart start
 
-          if id.present?
-            rows_updated = Ductwork.wrap_with_app_executor do
-              Ductwork::Pipeline
-                .where(id: id, claimed_for_advancing_at: nil)
-                .update_all(
-                  claimed_for_advancing_at: Time.current,
-                  status: "advancing"
-                )
-            end
+      def alive?
+        thread&.alive? || false
+      end
 
-            if rows_updated == 1
-              Ductwork.logger.debug(
-                msg: "Pipeline claimed",
-                pipeline_id: id,
-                pipeline: klass,
-                role: :pipeline_advancer
-              )
+      def stop
+        running_context.shutdown!
+      end
 
-              pipeline = Ductwork.wrap_with_app_executor do
-                pipeline = Ductwork::Pipeline.find(id)
-                pipeline.advance!
+      def kill
+        stop
+        thread&.kill
+      end
 
-                Ductwork.logger.debug(
-                  msg: "Pipeline advanced",
-                  pipeline_id: id,
-                  pipeline: klass,
-                  role: :pipeline_advancer
-                )
+      def join(limit)
+        thread&.join(limit)
+      end
 
-                # rubocop:todo Metrics/BlockNesting
-                status = pipeline.completed? ? "completed" : "in_progress"
-                # rubocop:enable Metrics/BlockNesting
-              ensure
-                # release the pipeline and set last advanced at so it doesn't
-                # block. we're not using a queue so we have to use a db
-                # timestamp
-                pipeline.update!(
-                  claimed_for_advancing_at: nil,
-                  last_advanced_at: Time.current,
-                  status: status || "in_progress"
-                )
-              end
-            else
-              Ductwork.logger.debug(
-                msg: "Did not claim pipeline, avoided race condition",
-                pipeline_id: id,
-                pipeline: klass,
-                role: :pipeline_advancer
-              )
-            end
-          else
-            Ductwork.logger.debug(
-              msg: "No pipeline needs advancing",
-              pipeline: klass,
-              role: :pipeline_advancer
-            )
-          end
-
-          sleep(polling_timeout)
-        end
-
-        run_hooks_for(:stop)
+      def name
+        "ductwork.pipeline_advancer.#{klass}.#{index}"
       end
 
       private
 
-      attr_reader :running_context, :klass
+      attr_reader :klass, :index, :running_context
+
+      def work_loop
+        run_hooks_for(:start)
+
+        Ductwork.logger.debug(
+          msg: "Entering main work loop",
+          role: :pipeline_advancer,
+          pipeline: klass
+        )
+
+        while running_context.running?
+          Branch.with_latest_claimed(klass) do |branch, transition, advancement|
+            @branch = branch
+            branch.advance!(transition, advancement)
+          ensure
+            @branch = nil
+          end
+
+          @last_heartbeat_at = Time.current
+
+          sleep(polling_timeout)
+        end
+
+        Ductwork.logger.debug(
+          msg: "Shutting down",
+          role: :pipeline_advancer,
+          pipeline: klass
+        )
+
+        run_hooks_for(:stop)
+      end
 
       def run_hooks_for(event)
         Ductwork.hooks[:advancer].fetch(event, []).each do |block|

@@ -2,16 +2,13 @@
 
 module Ductwork
   class Pipeline < Ductwork::Record # rubocop:todo Metrics/ClassLength
-    has_many :steps, class_name: "Ductwork::Step", foreign_key: "pipeline_id", dependent: :destroy
-    has_many :tuples, class_name: "Ductwork::Tuple", foreign_key: "pipeline_id", dependent: :destroy
+    has_many :runs,
+             class_name: "Ductwork::Run",
+             foreign_key: "pipeline_id",
+             dependent: :destroy
 
     validates :klass, presence: true
-    validates :definition, presence: true
-    validates :definition_sha1, presence: true
     validates :status, presence: true
-    validates :started_at, presence: true
-    validates :triggered_at, presence: true
-    validates :last_advanced_at, presence: true
 
     enum :status,
          pending: "pending",
@@ -19,6 +16,7 @@ module Ductwork
          waiting: "waiting",
          advancing: "advancing",
          halted: "halted",
+         dampened: "dampened",
          completed: "completed"
 
     def self.inherited(subclass)
@@ -30,6 +28,7 @@ module Ductwork
     end
 
     class DefinitionError < StandardError; end
+    class ReviveError < StandardError; end
 
     class << self
       attr_reader :pipeline_definition
@@ -52,31 +51,42 @@ module Ductwork
         Ductwork.defined_pipelines << name.to_s
       end
 
-      def trigger(*args)
+      def trigger(*args) # rubocop:todo Metrics
         if pipeline_definition.nil?
           raise DefinitionError, "Pipeline must be defined before triggering"
         end
 
+        now = Time.current
         node = pipeline_definition.dig(:nodes, 0)
         klass = pipeline_definition.dig(:edges, node, :klass)
         definition = JSON.dump(pipeline_definition)
 
-        pipeline = Record.transaction do
+        pipeline = Record.transaction do # rubocop:todo Metrics/BlockLength
           p = create!(
             klass: name.to_s,
+            status: :in_progress
+          )
+          run = p.runs.create!(
+            pipeline_klass: name.to_s,
             status: :in_progress,
             definition: definition,
             definition_sha1: Digest::SHA1.hexdigest(definition),
-            triggered_at: Time.current,
-            started_at: Time.current,
-            last_advanced_at: Time.current
+            triggered_at: now,
+            started_at: now
           )
-          step = p.steps.create!(
+          branch = run.branches.create!(
+            pipeline_klass: name.to_s,
+            status: :in_progress,
+            started_at: now,
+            last_advanced_at: now
+          )
+          step = branch.steps.create!(
+            run: run,
             node: node,
             klass: klass,
             status: :in_progress,
             to_transition: :start,
-            started_at: Time.current
+            started_at: now
           )
           Ductwork::Job.enqueue(step, *args)
 
@@ -93,219 +103,114 @@ module Ductwork
       end
     end
 
-    def advance!
-      # NOTE: if we've expanded the pipeline there could be a lot of
-      # advancing records which may cause memory issues. something to
-      # watch out for here and maybe add in config to use AR relation
-      # at certain counts or even memory limits.
-      advancing_steps = steps.advancing.pluck(:id, :node, :klass)
-      advancing_ids = advancing_steps.map(&:first)
-      edges = find_edges(advancing_steps)
+    def current_run
+      runs.in_progress.sole
+    end
+
+    def revive!(duplicate_context: false)
+      if !halted?
+        raise ReviveError, "Cannot revive #{status} pipeline"
+      end
+
+      last_run = runs.order(started_at: :desc).first
+
+      if last_run.blank?
+        raise ReviveError, "Cannot revive pipeline without previous run"
+      end
+
+      now = Time.current
+      new_run = last_run.dup
+      new_run.triggered_at = now
+      new_run.started_at = now
+      new_run.status = "in_progress"
 
       Ductwork::Record.transaction do
-        if edges.nil? || edges.all? { |_, attrs| attrs[:to].blank? }
-          conditionally_complete_pipeline(advancing_ids)
-        else
-          advance_to_next_steps_by_type(edges, advancing_ids)
-        end
+        new_run.save!
+        duplicate_successful_branches_and_steps(new_run, last_run, now)
+        duplicate_halted_branches_and_steps(new_run, last_run, now)
+        conditionally_duplicate_context(last_run, new_run, now, duplicate_context)
+        in_progress!
       end
-    end
 
-    def parsed_definition
-      @parsed_definition ||= JSON.parse(definition).with_indifferent_access
-    end
-
-    def complete!
-      update!(status: :completed, completed_at: Time.current)
-
-      Ductwork.logger.info(
-        msg: "Pipeline completed",
-        pipeline_id: id,
-        role: :pipeline_advancer
-      )
-    end
-
-    def halt!
-      update!(status: :halted, halted_at: Time.current)
-
-      Ductwork.logger.info(
-        msg: "Pipeline halted",
-        pipeline_id: id,
-        pipeline_klass: klass
-      )
+      self
     end
 
     private
 
-    def create_step_and_enqueue_job(edge:, input_arg:, node: nil)
-      status = :in_progress
-      started_at = Time.current
-      # NOTE: "chain" is used by ActiveRecord so we have to call
-      # this enum value "default" :sad:
-      to_transition = edge[:type] == "chain" ? "default" : edge[:type]
-      node ||= edge[:to].sole
-      klass = parsed_definition.dig(:edges, node, :klass)
+    def duplicate_successful_branches_and_steps(new_run, last_run, now)
+      status = %i[advancing waiting completed]
 
-      next_step = steps.create!(node:, klass:, status:, to_transition:, started_at:)
-      Ductwork::Job.enqueue(next_step, input_arg)
-    end
+      last_run.branches.where(status:).find_each do |branch|
+        new_branch = branch.dup
+        new_branch.run = new_run
+        new_branch.started_at = now
+        new_branch.completed_at = now
 
-    def find_edges(advancing_steps)
-      if advancing_steps.any?
-        nodes = advancing_steps.map(&:second)
+        new_branch.save!
 
-        parsed_definition.fetch(:edges, {}).select { |k| k.in?(nodes) }
-      end
-    end
+        branch.steps.where(status:).find_each do |step|
+          new_step = step.dup
+          new_step.source_step = step
+          new_step.branch = new_branch
+          new_step.run = new_run
+          new_step.started_at = now
+          new_step.completed_at = now
 
-    def conditionally_complete_pipeline(advancing_ids)
-      steps
-        .where(id: advancing_ids)
-        .update_all(status: :completed, completed_at: Time.current)
-
-      remaining = steps
-                  .where(status: %w[in_progress pending advancing])
-                  .where.not(id: advancing_ids)
-                  .exists?
-
-      if !remaining
-        complete!
-      end
-    end
-
-    def advance_to_next_steps_by_type(edges, advancing_ids)
-      steps.where(id: advancing_ids).update_all(status: :completed, completed_at: Time.current)
-
-      if edges.all? { |_, attrs| attrs[:type] == "combine" }
-        conditionally_combine_next_steps(edges, advancing_ids)
-      else
-        edges.each do |node, attrs|
-          if attrs[:type] == "collapse"
-            conditionally_collapse_next_steps(node, attrs, advancing_ids)
-          else
-            advance_non_merging_steps(attrs, advancing_ids)
-          end
+          new_step.save!
         end
       end
-      log_pipeline_advanced(edges)
     end
 
-    def advance_non_merging_steps(edge, advancing_ids)
-      to_transition = edge[:type]
-      klass = edge[:klass]
+    def duplicate_halted_branches_and_steps(new_run, last_run, now) # rubocop:todo Metrics/AbcSize
+      status = %i[advancing waiting completed]
 
-      steps.where(id: advancing_ids, klass: klass).find_each do |step|
-        if to_transition.in?(%w[chain divide])
-          advance_to_next_steps(step.id, edge)
-        elsif to_transition == "expand"
-          expand_to_next_steps(step.id, edge)
-        else
-          Ductwork.logger.error(
-            msg: "Invalid To Transition",
-            to_transition: to_transition,
-            pipeline_id: id,
-            role: :pipeline_advancer
+      last_run.branches.where(status: :halted).find_each do |branch| # rubocop:todo Metrics/BlockLength
+        new_branch = branch.dup
+        new_branch.run = new_run
+        new_branch.status = "in_progress"
+        new_branch.started_at = now
+        new_branch.completed_at = nil
+        new_branch.last_advanced_at = now
+        new_branch.save!
+
+        branch.steps.where(status:).find_each do |step|
+          new_step = step.dup
+          new_step.source_step = step
+          new_step.branch = new_branch
+          new_step.run = new_run
+          new_step.started_at = now
+          new_step.completed_at = now
+
+          new_step.save!
+        end
+
+        failed_step = branch.steps.find_by(status: :failed)
+
+        if failed_step.present?
+          step = new_branch.steps.create!(
+            run: new_run,
+            node: failed_step.node,
+            klass: failed_step.klass,
+            status: :in_progress,
+            to_transition: failed_step.to_transition,
+            started_at: now
           )
+          Ductwork::Job.enqueue(step)
         end
       end
     end
 
-    def advance_to_next_steps(step_id, edge)
-      too_many = edge[:to].tally.any? do |to_klass, count|
-        depth = Ductwork
-                .configuration
-                .steps_max_depth(pipeline: klass, step: to_klass)
+    def conditionally_duplicate_context(last_run, new_run, now, duplicate_context)
+      if duplicate_context
+        last_run.tuples.find_each do |tuple|
+          new_tuple = tuple.dup
+          new_tuple.run = new_run
+          new_tuple.first_set_at = now
+          new_tuple.last_set_at = now
 
-        depth != -1 && count > depth
-      end
-
-      if too_many
-        halt!
-      else
-        edge[:to].each do |node|
-          input_arg = Ductwork::Job.find_by(step_id:).return_value
-          create_step_and_enqueue_job(edge:, input_arg:, node:)
+          new_tuple.save!
         end
       end
-    end
-
-    def conditionally_combine_next_steps(edges, advancing_ids)
-      if steps.where(status: %w[pending in_progress], node: edges.keys).none?
-        combine_next_steps(edges, advancing_ids)
-      else
-        Ductwork.logger.debug(
-          msg: "Not all divided steps have completed; not combining",
-          pipeline_id: id,
-          role: :pipeline_advancer
-        )
-      end
-    end
-
-    def combine_next_steps(edges, advancing_ids)
-      edge = edges.values.sample
-      groups = steps
-               .where(id: advancing_ids)
-               .group(:node)
-               .count
-               .keys
-               .map { |node| steps.where(id: advancing_ids).where(node:) }
-
-      groups.first.zip(*groups[1..]).each do |group|
-        input_arg = Ductwork::Job
-                    .where(step_id: group.map(&:id))
-                    .map(&:return_value)
-        create_step_and_enqueue_job(edge:, input_arg:)
-      end
-    end
-
-    def expand_to_next_steps(step_id, edge)
-      next_klass = edge[:to].sole
-      return_value = Ductwork::Job
-                     .find_by(step_id:)
-                     .return_value
-      max_depth = Ductwork.configuration.steps_max_depth(pipeline: klass, step: next_klass)
-
-      if max_depth != -1 && return_value.count > max_depth
-        halt!
-      else
-        # TODO: Brainstorm on using `insert_all` instead of iterating.
-        # Performance is bad when the return value has a lot of elements
-        # and we create a step and job individually
-        Array(return_value).each do |input_arg|
-          create_step_and_enqueue_job(edge:, input_arg:)
-        end
-      end
-    end
-
-    def conditionally_collapse_next_steps(node, edge, advancing_ids)
-      if steps.where(status: %w[pending in_progress], node: node).none?
-        collapse_next_steps(edge, advancing_ids)
-      else
-        Ductwork.logger.debug(
-          msg: "Not all expanded steps have completed; not collapsing",
-          pipeline_id: id,
-          role: :pipeline_advancer
-        )
-      end
-    end
-
-    def collapse_next_steps(edge, advancing_ids)
-      input_arg = []
-
-      Ductwork::Job.where(step_id: advancing_ids).find_each do |job|
-        input_arg << job.return_value
-      end
-
-      create_step_and_enqueue_job(edge:, input_arg:)
-    end
-
-    def log_pipeline_advanced(edges)
-      Ductwork.logger.info(
-        msg: "Pipeline advanced",
-        pipeline_id: id,
-        transitions: edges.map { |_, v| v.dig(-1, :type) },
-        role: :pipeline_advancer
-      )
     end
   end
 end

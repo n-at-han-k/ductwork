@@ -4,8 +4,8 @@ module Ductwork
   class ApplicationController < ActionController::Base
     DEFAULT_PER_PAGE = 50
 
-    def query_pipelines
-      Ductwork::Pipeline
+    def query_pipeline_runs
+      Ductwork::Run
         .includes(steps: { job: { executions: :result } })
         .then(&method(:filter_by_klass))
         .then(&method(:filter_by_status))
@@ -15,7 +15,7 @@ module Ductwork
 
     def filter_by_klass(relation)
       if params[:klass].present?
-        relation.where(klass: params[:klass])
+        relation.where(pipeline_klass: params[:klass])
       else
         relation
       end

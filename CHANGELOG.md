@@ -1,5 +1,128 @@
 # Ductwork Changelog
 
+## [1.0.0] (Unreleased)
+
+- chore: set `@branch` ivar after branch is claimed
+- fix: only use `unique_by` options for non-MySQL db adapters
+- feat: add mysql and postgresql databases to CI test matrix
+- fix: don't use partial indexes for MySQL
+- fix: adopt or create process record when reporting heartbeat
+- fix: fan-in advancement checks branch status instead of step status
+- fix: add back in calling `on_halt` DSL method
+- feat: set `halt_reason` when halting branch
+- chore: add `halt_reason` column to `ductwork_branches` table
+- fix: update proper records and state for advancer retry
+- feat: respect pipeline advancer max retry configuration
+- feat: add pipeline advancer max retry configuration
+- feat: properly set pipeline/run terminal states
+- fix: check for terminal status before setting status on pipeline
+- chore: do not halt pipeline from job worker
+- feat: update branch claim query
+- feat: implement `Ductwork::Pipeline#revive!`
+- chore: add `source_step_id` column on `ductwork_steps`
+- fix: protect against null error backtraces for job results
+- fix: update dashboard pages to handle `ductwork_runs`
+- fix: create `ductwork_runs` records opaquely in rspec test helpers
+- feat: associate `branches`, `steps`, and `tuples` to `runs` instead of `pipelines`
+- feat: add `ductwork_runs` table and model to represent pipeline runs
+- chore: rename `ductwork_runs` to `ductwork_attempts`
+- chore: log when pipeline advancement errors
+- fix: move branch release into main advance transaction
+- fix: set `last_advanced_at` timestamp when releasing branch
+- chore: derive process dead threshold from process reap threshold
+- fix: move transition and advancement creation into claim transaction
+- fix: guard against PID reuse with guard statement
+- fix: use safe navigation operator on process records
+- fix: rescue all job worker errors as to not let thread die
+- fix: reap process (and claims) on process restart or immediate shutdown
+- chore: bump ruby versions in CI
+- chore: bump rails versions in appraisals file
+- chore: DRY up process record destruction
+- fix: release job availabilities during process reaping
+- fix: use proper association to `ductwork_processes` in `ductwork_availabilities`
+- fix: release branches during process reaping
+- feat: add process reaper check to supervisors' run loop
+- chore: DRY up process record adoption and creation
+- fix: create or adopt process records in pipeline advancer and job worker
+- fix: create top-level process record for thread supervisor
+- fix: use safe navigation in rescue when advancing branch
+- fix: use correct column name in migration
+- feat!: advance branches instead of pipelines - BREAKING CHANGE: this completely changes how pipelines are advanced. to migrate let all your current pipelines complete then deploy
+- fix: delete child process records when restarting within supervisor
+- fix: wrap optimistic job claiming in a single transaction
+- chore: bump project and CI ruby versions to v4.0.2
+- fix: add missing index when migrating to UUIDs
+- fix: job availability claim and update state in a single transaction
+- feat: complete and halt active branches for pipelines
+- feat: create initial branch when a pipeline is triggered
+- feat: introduce `Branch` and `BranchJunction` models and tables
+- fix: correctly log transition names via edge
+
+## [0.26.0]
+
+- feat: add `divert` and complementary `converge` transitions - this is essentially a conditional/case statement transition for pipelines including it's "fan-in" method
+
+## [0.25.0]
+
+- chore: align "dampen" naming and remove "pause" naming
+
+## [0.24.0]
+
+- feat: add new step transition enum values
+
+## [0.23.0]
+
+- chore: add `paused` pipeline status to enum
+
+## [0.22.0]
+
+- feat: add optional `to` keyword argument to `chain` transition - this makes the DSL a bit more aligned
+
+## [0.21.0]
+
+- feat: enqueue jobs in batches when expanding - this marks a major performance improvement
+- fix: use node's defined klass when looking up max expansion depth
+- feat!: change all tables' primary key type to UUID v7 - BREAKING CHANGE: be sure to run `bin/rails g ductwork:update` to get the database migrations required to migrate existing data
+- chore!: drop support for ruby 3.2 - BREAKING CHANGE: we need UUID v7 from `SecureRandom` to use as primary keys for our tables; it is only available on Ruby 3.3+ (support ends in a ~month so this was going to happen anyway)
+- feat: use row locking job claiming when the database supports it
+- feat: denormalize pipeline klass column on `ductwork_availabilities` - be sure to run `bin/rails g ductwork:update` to get the latest migration
+- fix: use pipeline class name in log message
+
+## [0.20.2]
+
+- fix: complete pipeline when there are no steps to expand to
+
+## [0.20.1]
+
+- fix: fallback to hostname if machine id file is blank - came across this in heroku
+
+## [0.20.0]
+
+- feat: add "timed_out" enum value to execution result model
+- chore: change log level to warn for thread restart messages
+- chore: add thread name to log messages
+- feat: add optional index argument to pipeline advancer to be used in thread name
+- fix: use correct "role" in log messages
+- feat: support a "thread-only" mode instead of forking processes
+- chore: use more descriptive thread names for job workers
+- chore: refactor to `Ductwork::Processes::JobWorker#join`
+- chore: refactor to `Ductwork::Processes::JobWorker#kill`
+- chore: refactor to `Ductwork::Processes::JobWorker#name`
+- chore: use `RunningContext` instance instead of a boolean in the Supervisor - this running context will likely be shared to all child runners when running in "all thread" mode
+- chore!: officially drop support for ruby 3.1 - BREAKING CHANGE: while this is a breaking change, this shouldn't affect anyone since ruby 3.1 has been EOL for a bit; this is more of a formality
+- chore: update `bundler`
+- chore: change project ruby version to 4.0.1
+- feat: add "forking" configuration with default - this will be used to change the concurreny model on boot, specifically deciding if pipeline advancer and job workers will be forked or created as threads
+
+## [0.19.0]
+
+- chore: bump rails-related dependencies to v8.1.2
+- chore: remove ruby v3.2.9 from CI testing matrix - support is ending in March '26 but it's being removed now to better support edge rails
+- feat: loosen rails version constraint to allow rails edge
+- feat: respect "role" configuration when booting - ie. run main process as supervisor, pipeline advancer, or job worker
+- feat: allow job worker runner to take a collection of pipelines and create workers for all configured pipelines - this will only happen when the "role" configuration is "worker" otherwise a process will be spun up for each pipeline
+- feat: add "role" configuration - to be used to set the role of the entire ductwork running instance
+
 ## [0.18.0]
 
 - fix: show countdown for pipelines/steps scheduled in the future

@@ -3,7 +3,7 @@
 [![CI](https://github.com/ductwork/ductwork/actions/workflows/main.yml/badge.svg)](https://github.com/ductwork/ductwork/actions/workflows/main.yml)
 [![Gem Version](https://badge.fury.io/rb/ductwork.svg?icon=si%3Arubygems)](https://rubygems.org/gems/ductwork)
 
-A Ruby pipeline framework.
+A Ruby pipeline and workflow framework.
 
 Ductwork lets you build complex pipelines quickly and easily using intuitive Ruby tooling and a natural DSL. No need to learn complicated unified object models or stand up separate runner instances—just write Ruby code and let Ductwork handle the orchestration.
 
@@ -23,6 +23,12 @@ Run the Rails generator to create the binstub, configuration file, and migration
 
 ```bash
 bin/rails generate ductwork:install
+```
+
+**NOTE**: run the update generator if you've already installed ductwork to get updates:
+
+```bash
+bin/rails generate ductwork:update
 ```
 
 Run migrations and you're ready to start building pipelines!
@@ -46,7 +52,7 @@ default: &default
   pipelines: "*"
 ```
 
-See the [Configuration Guide](https://docs.getductwork.io/advanced/configuration.html) for all available options including thread counts, timeouts, and database settings.
+See the [Configuration Guide](https://docs.getductwork.io/getting-started/configuration.html) for all available options including thread counts, timeouts, and database settings.
 
 ## Usage
 
@@ -97,7 +103,7 @@ class EnrichUserDataPipeline < Ductwork::Pipeline
             .divide(to: [FetchDataFromSourceA,     # Split into parallel branches
                          FetchDataFromSourceB])
             .combine(into: CollateUserData)        # Merge branches back together
-            .chain(UpdateUserData)                 # Sequential processing
+            .chain(to: UpdateUserData)             # Sequential processing
             .collapse(into: ReportSuccess)         # Gather expanded steps
   end
 end

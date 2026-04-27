@@ -80,29 +80,29 @@
         </tr>
       </thead>
       <tbody>
-        <% @pipelines.each do |pipeline| %>
-          <tr class="row-link" data-href="<%= pipeline_path(pipeline.id) %>">
+        <% @runs.each do |run| %>
+          <tr class="row-link" data-href="<%= pipeline_path(run.pipeline_id) %>">
             <td>
               <code>
-                <%= pipeline.id %>
+                <%= run.pipeline_id %>
               </code>
             </td>
             <td>
               <code>
-                <%= pipeline.klass %>
+                <%= run.pipeline_klass %>
               </code>
             </td>
             <td>
-              <div class="status-pill <%= pipeline.status %>">
-                <%= pipeline.status.gsub("_", "-") %>
+              <div class="status-pill <%= run.status %>">
+                <%= run.status.gsub("_", "-") %>
               </div>
             </td>
             <td>
               <%
                 count = Ductwork::Result
-                        .joins(execution: { job: { step: :pipeline }})
+                        .joins(execution: { job: { step: { run: :pipeline }}})
                         .failure
-                        .where(ductwork_pipelines: { id: pipeline.id })
+                        .where(ductwork_pipelines: { id: run.pipeline_id })
                         .count
               %>
               <% if count.zero? %>
@@ -116,16 +116,16 @@
             </td>
             <td>
               <div class="tight-timestamp">
-                <%= pipeline.started_at.iso8601(3) %>
+                <%= run.started_at.iso8601(3) %>
               </div>
             </td>
             <td>
-              <% if pipeline.completed_at.nil? %>
-                <div data-started-at=<%= pipeline.started_at.iso8601 %>>
+              <% if run.completed_at.nil? %>
+                <div data-started-at=<%= run.started_at.iso8601 %>>
                   <span id="elapsed-timer">0h 0m 0s</span>
                 </div>
               <% else %>
-                <%= formatted_time_distance(pipeline.started_at, pipeline.completed_at) %>
+                <%= formatted_time_distance(run.started_at, run.completed_at) %>
               <% end %>
             </td>
           </tr>

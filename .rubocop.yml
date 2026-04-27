@@ -6,16 +6,19 @@ plugins:
 
 AllCops:
   NewCops: enable
-  TargetRubyVersion: 3.1
+  TargetRubyVersion: 3.3
   Exclude:
     - Appraisals
     - gemfiles/**/*
-    - lib/generators/ductwork/install/templates/db/*.rb
     - vendor/**/*
 
 Layout/MultilineMethodCallIndentation:
   Exclude:
     - spec/**/*_spec.rb
+
+Lint/EmptyBlock:
+  Exclude:
+    - spec/**/*.rb
 
 Lint/EmptyClass:
   AllowComments: true
@@ -24,18 +27,36 @@ Lint/MissingSuper:
   AllowedParentClasses:
     - Ductwork::Step
 
-Metrics/ClassLength:
-  Max: 150
-
-Metrics/MethodLength:
-  Max: 40
-
 Metrics/AbcSize:
   Max: 30
+  Exclude:
+    - lib/generators/ductwork/update/update_generator.rb
 
 Metrics/BlockLength:
   Exclude:
+    - lib/generators/ductwork/install/templates/db/*.rb
     - lib/ductwork/testing/rspec.rb
+
+Metrics/ClassLength:
+  Max: 150
+
+Metrics/CyclomaticComplexity:
+  Exclude:
+    - lib/generators/ductwork/install/install_generator.rb
+    - lib/generators/ductwork/update/update_generator.rb
+
+Metrics/MethodLength:
+  Max: 40
+  Exclude:
+    - lib/generators/ductwork/install/install_generator.rb
+    - lib/generators/ductwork/install/templates/db/*.rb
+    - lib/generators/ductwork/update/update_generator.rb
+    - lib/generators/ductwork/update/templates/db/*.rb
+    - spec/internal/db/migrate/*.rb
+
+Metrics/PerceivedComplexity:
+  Exclude:
+    - lib/generators/ductwork/update/update_generator.rb
 
 Naming/BlockForwarding:
   EnforcedStyle: explicit
@@ -50,6 +71,9 @@ RSpec/ExampleLength:
   Max: 50
 
 RSpec/IndexedLet:
+  Enabled: false
+
+RSpecRails/InferredSpecType:
   Enabled: false
 
 RSpec/MultipleExpectations:
@@ -94,6 +118,9 @@ Style/StringLiterals:
 
 Style/StringLiteralsInInterpolation:
   EnforcedStyle: double_quotes
+
+Style/SymbolProc:
+  Enabled: false
 
 Style/TrailingCommaInArrayLiteral:
   EnforcedStyleForMultiline: consistent_comma

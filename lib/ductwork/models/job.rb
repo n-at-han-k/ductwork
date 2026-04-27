@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Ductwork
-  class Job < Ductwork::Record # rubocop:todo Metrics/ClassLength
+  class Job < Ductwork::Record
     belongs_to :step, class_name: "Ductwork::Step"
     has_many :executions, class_name: "Ductwork::Execution", foreign_key: "job_id", dependent: :destroy
 
@@ -11,60 +11,8 @@ module Ductwork
 
     FAILED_EXECUTION_TIMEOUT = 10.seconds
 
-    def self.claim_latest(klass) # rubocop:todo Metrics
-      process_id = ::Process.pid
-      id = Ductwork::Availability
-           .joins(execution: { job: { step: :pipeline } })
-           .where("ductwork_availabilities.started_at <= ?", Time.current)
-           .where(completed_at: nil)
-           .where(ductwork_pipelines: { klass: })
-           .order(:created_at)
-           .limit(1)
-           .pluck(:id)
-           .first
-
-      if id.present?
-        # TODO: probably makes sense to use SQL here instead of relying
-        # on ActiveRecord to construct the correct `UPDATE` query
-        rows_updated = nil
-        Ductwork::Record.transaction do
-          rows_updated = Ductwork::Availability
-                         .where(id: id, completed_at: nil)
-                         .update_all(completed_at: Time.current, process_id: process_id)
-          Ductwork::Execution
-            .joins(:availability)
-            .where(completed_at: nil)
-            .where(ductwork_availabilities: { id: })
-            .update_all(process_id:)
-        end
-
-        if rows_updated == 1
-          Ductwork.logger.debug(
-            msg: "Job claimed",
-            role: :job_worker,
-            process_id: process_id,
-            availability_id: id
-          )
-          job = Ductwork::Job
-                .joins(executions: :availability)
-                .find_by(ductwork_availabilities: { id:, process_id: })
-
-          Ductwork::Record.transaction do
-            job.step.in_progress!
-            job.step.pipeline.in_progress!
-          end
-
-          job
-        else
-          Ductwork.logger.debug(
-            msg: "Did not claim job, avoided race condition",
-            role: :job_worker,
-            process_id: process_id,
-            availability_id: id
-          )
-          nil
-        end
-      end
+    def self.claim_latest(klass)
+      Ductwork::JobClaim.new(klass).latest
     end
 
     def self.enqueue(step, *args)
@@ -78,7 +26,8 @@ module Ductwork
         retry_count: 0
       )
       execution.create_availability!(
-        started_at: Time.current
+        started_at: Time.current,
+        pipeline_klass: step.run.pipeline_klass
       )
 
       Ductwork.logger.info(
@@ -100,18 +49,18 @@ module Ductwork
         job_klass: klass
       )
       args = JSON.parse(input_args)["args"]
-      instance = Object.const_get(klass).build_for_execution(step.pipeline_id, *args)
-      run = execution.create_run!(
+      instance = Object.const_get(klass).build_for_execution(step.run_id, *args)
+      attempt = execution.create_attempt!(
         started_at: Time.current
       )
       result = nil
 
       begin
         output_payload = instance.execute
-        execution_succeeded!(execution, run, output_payload)
+        execution_succeeded!(execution, attempt, output_payload)
         result = "success"
       rescue StandardError => e
-        execution_failed!(execution, run, e)
+        execution_errored!(execution, attempt, e)
         result = "failure"
       ensure
         Ductwork.logger.info(
@@ -131,30 +80,47 @@ module Ductwork
       end
     end
 
+    def execution_crashed!(execution)
+      Ductwork::Record.transaction do
+        execution.update!(completed_at: Time.current)
+        execution.attempt&.update!(completed_at: Time.current)
+        execution.create_result!(result_type: "process_crashed")
+
+        new_execution = executions.create!(
+          retry_count: execution.retry_count,
+          started_at: FAILED_EXECUTION_TIMEOUT.from_now
+        )
+        new_execution.create_availability!(
+          started_at: FAILED_EXECUTION_TIMEOUT.from_now,
+          pipeline_klass: step.run.pipeline_klass
+        )
+      end
+    end
+
     private
 
-    def execution_succeeded!(execution, run, output_payload)
+    def execution_succeeded!(execution, attempt, output_payload)
       payload = JSON.dump({ payload: output_payload })
 
       Ductwork::Record.transaction do
         update!(output_payload: payload, completed_at: Time.current)
         execution.update!(completed_at: Time.current)
-        run.update!(completed_at: Time.current)
+        attempt.update!(completed_at: Time.current)
         execution.create_result!(result_type: "success")
         step.update!(status: :advancing)
       end
     end
 
-    def execution_failed!(execution, run, error) # rubocop:todo Metrics
-      halted = false
-      pipeline = step.pipeline
-      max_retry = Ductwork
-                  .configuration
-                  .job_worker_max_retry(pipeline: pipeline.klass, step: klass)
+    def execution_errored!(execution, attempt, error) # rubocop:todo Metrics
+      run = step.run
+      max_retry = Ductwork.configuration.job_worker_max_retry(
+        pipeline: run.pipeline_klass,
+        step: klass
+      )
 
-      Ductwork::Record.transaction do
+      Ductwork::Record.transaction do # rubocop:todo Metrics/BlockLength
         execution.update!(completed_at: Time.current)
-        run.update!(completed_at: Time.current)
+        attempt.update!(completed_at: Time.current)
         execution.create_result!(
           result_type: "failure",
           error_klass: error.class.to_s,
@@ -168,40 +134,32 @@ module Ductwork
             started_at: FAILED_EXECUTION_TIMEOUT.from_now
           )
           new_execution.create_availability!(
-            started_at: FAILED_EXECUTION_TIMEOUT.from_now
+            started_at: FAILED_EXECUTION_TIMEOUT.from_now,
+            pipeline_klass: run.pipeline_klass
+          )
+
+          Ductwork.logger.warn(
+            msg: "Job errored",
+            error_klass: error.class.name,
+            error_message: error.message,
+            job_id: id,
+            job_klass: klass,
+            run_id: run.id,
+            role: :job_worker
           )
         elsif execution.retry_count >= max_retry
-          halted = true
-
           step.update!(status: :failed)
-          pipeline.halt!
+
+          Ductwork.logger.error(
+            msg: "Job exhausted retries and failed",
+            error_klass: error.class.name,
+            error_message: error.message,
+            job_id: id,
+            job_klass: klass,
+            run_id: run.id,
+            role: :job_worker
+          )
         end
-      end
-
-      Ductwork.logger.warn(
-        msg: "Job errored",
-        error_klass: error.class.name,
-        error_message: error.message,
-        job_id: id,
-        job_klass: klass,
-        pipeline_id: pipeline.id,
-        role: :job_worker
-      )
-
-      # NOTE: perform lifecycle hook execution outside of the transaction as
-      # to not unnecessarily hold it open
-      if halted
-        execute_on_halt(pipeline, error)
-      end
-    end
-
-    def execute_on_halt(pipeline, error)
-      klass = JSON
-              .parse(pipeline.definition)
-              .dig("metadata", "on_halt", "klass")
-
-      if klass.present?
-        Object.const_get(klass).new(error).execute
       end
     end
   end

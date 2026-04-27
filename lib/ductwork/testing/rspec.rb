@@ -66,7 +66,7 @@ RSpec::Matchers.define(:have_set_context) do |expected|
   supports_block_expectations
 
   match do |block|
-    ctx = Ductwork::Context.new(pipeline_id)
+    ctx = Ductwork::Context.new(run_id)
     before_values = expected.map { |k, _| ctx.get(k.to_s) }
 
     block.call
@@ -76,7 +76,21 @@ RSpec::Matchers.define(:have_set_context) do |expected|
     before_values.all?(&:nil?) && after_context == expected
   end
 
-  chain :for_pipeline, :pipeline_id
+  chain :for_pipeline do |pipeline|
+    @run_id = pipeline.current_run.id
+  end
+
+  chain :for_run do |given_run_id|
+    @run_id = given_run_id
+  end
+
+  def run_id
+    if @run_id.blank?
+      raise ArgumentError, "Must chain with .for_pipeline or .for_run"
+    end
+
+    @run_id
+  end
 
   failure_message do
     "Context does not match expected result"
@@ -88,25 +102,28 @@ module Ductwork
     module RSpec
       def pipeline_for(klass, **attrs)
         definition = klass.pipeline_definition.to_json
-        definition_sha1 = OpenSSL::Digest::SHA256.hexdigest(definition)
+        definition_sha1 = Digest::SHA1.hexdigest(definition)
+        pipeline_klass = klass.name.to_s
+        now = Time.current
         status = attrs[:status] || "in_progress"
-        triggered_at = attrs[:triggered_at] || Time.current
-        started_at = attrs[:started_at] || Time.current
-        last_advanced_at = attrs[:last_advanced_at] || Time.current
+        triggered_at = attrs[:triggered_at] || now
+        started_at = attrs[:started_at] || now
 
-        Ductwork::Pipeline.create!(
-          klass:,
+        pipeline = Ductwork::Pipeline.create!(klass:, status:)
+        pipeline.runs.create!(
+          pipeline_klass:,
           definition:,
           definition_sha1:,
           status:,
           triggered_at:,
-          started_at:,
-          last_advanced_at:
+          started_at:
         )
+
+        pipeline
       end
 
       def set_pipeline_context(pipeline, **key_values)
-        ctx = Ductwork::Context.new(pipeline.id)
+        ctx = Ductwork::Context.new(pipeline.current_run.id)
         key_values.each do |key, value|
           ctx.set(key.to_s, value)
         end

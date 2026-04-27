@@ -9,6 +9,10 @@ RSpec.describe Ductwork::Processes::JobWorker do
   end
 
   describe "#start" do
+    before do
+      create(:process, :current)
+    end
+
     it "creates a thread" do
       job_worker = described_class.new(pipeline, id)
 
@@ -16,7 +20,7 @@ RSpec.describe Ductwork::Processes::JobWorker do
         job_worker.start
       end.to change(job_worker, :thread).from(nil).to(be_a(Thread))
       expect(job_worker.thread).to be_alive
-      expect(job_worker.thread.name).to eq("ductwork.job_worker.#{id}")
+      expect(job_worker.thread.name).to eq("ductwork.job_worker.#{pipeline}.#{id}")
 
       shutdown(job_worker)
     end
@@ -30,6 +34,7 @@ RSpec.describe Ductwork::Processes::JobWorker do
       job_worker.start
       sleep(1)
 
+      expect(job_worker.thread).to be_alive
       expect(job_worker.last_heartbeat_at).to be_now
 
       shutdown(job_worker)
@@ -56,7 +61,7 @@ RSpec.describe Ductwork::Processes::JobWorker do
       expect(job_worker).not_to be_alive
     end
 
-    it "returns false if the thread is nul" do
+    it "returns false if the thread is null" do
       job_worker = described_class.new(pipeline, id)
 
       expect(job_worker).not_to be_alive
@@ -71,7 +76,27 @@ RSpec.describe Ductwork::Processes::JobWorker do
       job_worker.stop
       sleep(0.1)
 
-      expect(job_worker.thread).not_to be_alive
+      expect(job_worker).not_to be_alive
+    end
+  end
+
+  describe "#kill" do
+    it "delegates to the thread" do
+      job_worker = described_class.new(pipeline, id)
+      job_worker.start
+
+      job_worker.kill
+      sleep(0.1)
+
+      expect(job_worker).not_to be_alive
+    end
+  end
+
+  describe "#name" do
+    it "returns the thread name" do
+      job_worker = described_class.new(pipeline, id)
+
+      expect(job_worker.name).to eq("ductwork.job_worker.#{pipeline}.#{id}")
     end
   end
 

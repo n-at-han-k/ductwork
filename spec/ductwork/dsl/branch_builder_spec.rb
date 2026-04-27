@@ -56,13 +56,13 @@ RSpec.describe Ductwork::DSL::BranchBuilder do
     end
 
     it "returns itself" do
-      instance = builder.divide(to: [MySecondStep, MyThirdStep]) {} # rubocop:disable Lint/EmptyBlock
+      instance = builder.divide(to: [MySecondStep, MyThirdStep]) {}
 
       expect(instance).to eq(builder)
     end
 
     it "adds a new node and edge to the definition" do
-      builder.divide(to: [MySecondStep, MyThirdStep]) {} # rubocop:disable Lint/EmptyBlock
+      builder.divide(to: [MySecondStep, MyThirdStep]) {}
 
       expect(definition[:nodes]).to eq(
         ["MyFirstStep.a1b2c3d4", "MySecondStep.#{hex1}", "MyThirdStep.#{hex2}"]

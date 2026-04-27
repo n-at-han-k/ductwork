@@ -12,7 +12,8 @@ RSpec.describe Ductwork::CLI do
     end
 
     before do
-      allow(Ductwork::Processes::SupervisorRunner).to receive(:start!)
+      ENV.delete("DUCTWORK_ROLE")
+      allow(Ductwork::Processes::Launcher).to receive(:start_processes!)
       allow(Ductwork::Configuration).to receive(:new).and_return(config)
       allow(Ductwork).to receive(:logger=).and_call_original
       allow(Ductwork).to receive(:logger).and_return(logger)
@@ -23,7 +24,15 @@ RSpec.describe Ductwork::CLI do
 
       expect(logger).to have_received(:level=).with(0)
       expect(Ductwork).to have_received(:logger=).with(Ductwork::Configuration::DEFAULT_LOGGER)
-      expect(Ductwork::Configuration).to have_received(:new)
+      expect(Ductwork::Configuration).to have_received(:new).with(role: nil)
+    end
+
+    it "loads the role from ENV" do
+      ENV["DUCTWORK_ROLE"] = "advancer"
+
+      described_class.start!([])
+
+      expect(Ductwork::Configuration).to have_received(:new).with(role: "advancer")
     end
 
     it "prints the banner" do
@@ -37,19 +46,19 @@ RSpec.describe Ductwork::CLI do
   ██║  ██║██║   ██║██║        ██║   ██║███╗██║██║   ██║██╔══██╗██╔═██╗
   ██████╔╝╚██████╔╝╚██████╗   ██║   ╚███╔███╔╝╚██████╔╝██║  ██║██║  ██╗
   ╚═════╝  ╚═════╝  ╚═════╝   ╚═╝    ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝
-   ▒▒▓  ▒ ░▒▓▒ ▒ ▒ ░ ░▒ ▒  ░  ▒ ░░   ░ ▓░▒ ▒  ░ ▒░▒░▒░ ░ ▒▓ ░▒▓░▒ ▒▒ ▓▒
-    ░ ▒  ▒ ░░▒░ ░ ░   ░  ▒       ░      ▒ ░ ░    ░ ▒ ▒░   ░▒ ░ ▒░░ ░▒ ▒░
-     ░ ░  ░  ░░░ ░ ░ ░          ░        ░   ░  ░ ░ ░ ▒    ░░   ░ ░ ░░ ░
-        ░       ░     ░ ░                    ░        ░ ░     ░     ░  ░
-      ░               ░
+  ▒▒▓  ▒ ░▒▓▒ ▒ ▒ ░ ░▒ ▒  ░  ▒ ░░   ░ ▓░▒ ▒  ░ ▒░▒░▒░ ░ ▒▓ ░▒▓░▒ ▒▒ ▓▒
+   ░ ▒  ▒ ░░▒░ ░ ░   ░  ▒       ░      ▒ ░ ░    ░ ▒ ▒░   ░▒ ░ ▒░░ ░▒ ▒░
+    ░ ░  ░  ░░░ ░ ░ ░          ░        ░   ░  ░ ░ ░ ▒    ░░   ░ ░ ░░ ░
+       ░       ░     ░ ░                    ░        ░ ░     ░     ░  ░
+     ░               ░
   \e[0m
       BANNER
     end
 
-    it "starts the worker launcher" do
+    it "calls the process launcher" do
       described_class.start!([])
 
-      expect(Ductwork::Processes::SupervisorRunner).to have_received(:start!)
+      expect(Ductwork::Processes::Launcher).to have_received(:start_processes!)
     end
   end
 end

@@ -15,7 +15,9 @@ Rails::Generators.invoke(
   ["--force"],
   destination_root: Rails.root.join("spec", "internal").to_s
 )
-Combustion.initialize! :active_record, :action_controller, :action_view
+Combustion.initialize!(:active_record, :action_controller, :action_view) do
+  config.action_dispatch.show_exceptions = :none
+end
 
 require "rspec/rails"
 
@@ -30,6 +32,7 @@ RSpec.configure do |config|
   config.disable_monkey_patching!
   config.order = :random
   Kernel.srand(config.seed)
+  config.include Helpers
 
   config.expect_with :rspec do |c|
     c.syntax = :expect

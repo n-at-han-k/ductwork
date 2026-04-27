@@ -1,37 +1,58 @@
 # frozen_string_literal: true
 
 module Ductwork
-  class Configuration
+  class Configuration # rubocop:todo Metrics/ClassLength
     DEFAULT_ENV = :default
     DEFAULT_FILE_PATH = "config/ductwork.yml"
+    DEFAULT_FORKING = "default" # fork pipeline advancer and job workers
     DEFAULT_JOB_WORKER_COUNT = 5 # threads
     DEFAULT_JOB_WORKER_MAX_RETRY = 3 # attempts
     DEFAULT_JOB_WORKER_POLLING_TIMEOUT = 1 # second
     DEFAULT_JOB_WORKER_SHUTDOWN_TIMEOUT = 20 # seconds
     DEFAULT_LOGGER_LEVEL = ::Logger::INFO
     DEFAULT_LOGGER_SOURCE = "default" # `Logger` instance writing to STDOUT
+    DEFAULT_PIPELINE_ADVANCER_MAX_RETRY = 3 # attempts
     DEFAULT_PIPELINE_POLLING_TIMEOUT = 1 # second
     DEFAULT_PIPELINE_SHUTDOWN_TIMEOUT = 20 # seconds
+    DEFAULT_ROLE = "all" # supervisor, pipeline advancer, and job workers
     DEFAULT_STEPS_MAX_DEPTH = -1 # unlimited count
     DEFAULT_SUPERVISOR_POLLING_TIMEOUT = 1 # second
     DEFAULT_SUPERVISOR_SHUTDOWN_TIMEOUT = 30 # seconds
     DEFAULT_LOGGER = ::Logger.new($stdout)
     PIPELINES_WILDCARD = "*"
+    VALID_ROLES = %w[all advancer worker].freeze
+
+    class InvalidRoleError < StandardError; end
 
     attr_writer :job_worker_count, :job_worker_polling_timeout,
                 :job_worker_shutdown_timeout, :job_worker_max_retry,
                 :logger_level,
+                :pipeline_advancer_max_retry,
                 :pipeline_polling_timeout, :pipeline_shutdown_timeout,
                 :steps_max_depth,
                 :supervisor_polling_timeout, :supervisor_shutdown_timeout
 
-    def initialize(path: DEFAULT_FILE_PATH)
+    def initialize(path: DEFAULT_FILE_PATH, role: nil)
       full_path = Pathname.new(path)
       data = ActiveSupport::ConfigurationFile.parse(full_path).deep_symbolize_keys
       env = defined?(Rails) ? Rails.env.to_sym : DEFAULT_ENV
-      @config = data[env]
+      @config = if role.present?
+                  data[env].merge(role:)
+                else
+                  data[env]
+                end
     rescue Errno::ENOENT
-      @config = {}
+      @config = { role: }.compact
+    end
+
+    def role
+      r = config[:role] || DEFAULT_ROLE
+      validate_role!(r)
+      r
+    end
+
+    def forking
+      config[:forking] || DEFAULT_FORKING
     end
 
     def pipelines
@@ -106,6 +127,10 @@ module Ductwork
       @logger_source ||= fetch_logger_source
     end
 
+    def pipeline_advancer_max_retry
+      @pipeline_advancer_max_retry ||= fetch_pipeline_advancer_max_retry
+    end
+
     def pipeline_polling_timeout(pipeline = nil)
       pipeline ||= :default
       default = DEFAULT_PIPELINE_POLLING_TIMEOUT
@@ -171,6 +196,11 @@ module Ductwork
       config.dig(:logger, :source) || DEFAULT_LOGGER_SOURCE
     end
 
+    def fetch_pipeline_advancer_max_retry
+      config.dig(:pipeline_advancer, :max_retry) ||
+        DEFAULT_PIPELINE_ADVANCER_MAX_RETRY
+    end
+
     def fetch_pipeline_shutdown_timeout
       config.dig(:pipeline_advancer, :shutdown_timeout) ||
         DEFAULT_PIPELINE_SHUTDOWN_TIMEOUT
@@ -184,6 +214,12 @@ module Ductwork
     def fetch_supervisor_shutdown_timeout
       config.dig(:supervisor, :shutdown_timeout) ||
         DEFAULT_SUPERVISOR_SHUTDOWN_TIMEOUT
+    end
+
+    def validate_role!(role)
+      if VALID_ROLES.exclude?(role)
+        raise InvalidRoleError, "Must use a valid role"
+      end
     end
   end
 end

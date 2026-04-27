@@ -13,7 +13,7 @@ module Ductwork
       @klasses = Ductwork::Pipeline.group(:klass).pluck(:klass).sort
       @statuses = Ductwork::Pipeline.statuses.keys
       @per_page = 25
-      @pipelines = query_pipelines
+      @runs = query_pipeline_runs
     end
   end
 end

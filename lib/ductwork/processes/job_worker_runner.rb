@@ -3,8 +3,8 @@
 module Ductwork
   module Processes
     class JobWorkerRunner
-      def initialize(pipeline)
-        @pipeline = pipeline
+      def initialize(*pipelines)
+        @pipelines = pipelines
         @running_context = Ductwork::RunningContext.new
         @job_workers = []
 
@@ -24,13 +24,13 @@ module Ductwork
       end
 
       def run
-        create_process_record!
+        adopt_or_create_process!
         start_job_workers
 
         Ductwork.logger.debug(
           msg: "Entering main work loop",
           role: :job_worker_runner,
-          pipeline: pipeline
+          pipelines: pipelines
         )
 
         while running?
@@ -45,29 +45,28 @@ module Ductwork
 
       private
 
-      attr_reader :pipeline, :running_context, :job_workers
+      attr_reader :pipelines, :running_context, :job_workers
 
-      def create_process_record!
+      def adopt_or_create_process!
         Ductwork.wrap_with_app_executor do
-          Ductwork::Process.create!(
-            pid: ::Process.pid,
-            machine_identifier: Ductwork::MachineIdentifier.fetch,
-            last_heartbeat_at: Time.current
-          )
+          Ductwork::Process.adopt_or_create_current!
         end
       end
 
       def start_job_workers
-        Ductwork.configuration.job_worker_count(pipeline).times do |i|
-          job_worker = Ductwork::Processes::JobWorker.new(pipeline, i)
-          job_workers.push(job_worker)
-          job_worker.start
+        pipelines.each do |pipeline|
+          Ductwork.configuration.job_worker_count(pipeline).times do |i|
+            job_worker = Ductwork::Processes::JobWorker.new(pipeline, i)
+            job_workers.push(job_worker)
+            job_worker.start
 
-          Ductwork.logger.debug(
-            msg: "Created new job worker",
-            role: :job_worker_runner,
-            pipeline: pipeline
-          )
+            Ductwork.logger.debug(
+              msg: "Created new job worker",
+              role: :job_worker_runner,
+              pipeline: pipeline,
+              thread: job_worker.name
+            )
+          end
         end
       end
 
@@ -79,23 +78,24 @@ module Ductwork
         Ductwork.logger.debug(
           msg: "Checking thread health",
           role: :job_worker_runner,
-          pipeline: pipeline
+          pipelines: pipelines
         )
         job_workers.each do |job_worker|
           if !job_worker.alive?
             job_worker.restart
 
-            Ductwork.logger.info(
-              msg: "Restarted thread",
+            Ductwork.logger.warn(
+              msg: "Restarted job worker",
               role: :job_worker_runner,
-              pipeline: pipeline
+              pipeline: job_worker.pipeline,
+              thread: job_worker.name
             )
           end
         end
         Ductwork.logger.debug(
           msg: "Checked thread health",
           role: :job_worker_runner,
-          pipeline: pipeline
+          pipelines: pipelines
         )
       end
 
@@ -112,7 +112,7 @@ module Ductwork
         job_workers.each(&:stop)
         await_threads_graceful_shutdown
         kill_remaining_job_workers
-        delete_process_record!
+        reap_process_record!
       end
 
       def await_threads_graceful_shutdown
@@ -130,7 +130,7 @@ module Ductwork
 
             # TODO: Maybe make this configurable. If there's a ton of workers
             # it may not even get to the "later" ones depending on the timeout
-            job_worker.thread.join(1)
+            job_worker.join(1)
           end
         end
       end
@@ -138,22 +138,19 @@ module Ductwork
       def kill_remaining_job_workers
         job_workers.each do |job_worker|
           if job_worker.alive?
-            job_worker.thread.kill
+            job_worker.kill
             Ductwork.logger.debug(
               msg: "Killed thread",
               role: :job_worker_runner,
-              thread: job_worker.thread.name
+              thread: job_worker.name
             )
           end
         end
       end
 
-      def delete_process_record!
+      def reap_process_record!
         Ductwork.wrap_with_app_executor do
-          Ductwork::Process.find_by!(
-            pid: ::Process.pid,
-            machine_identifier: Ductwork::MachineIdentifier.fetch
-          ).delete
+          Ductwork::Process.current&.reap!(:job_worker_runner)
         end
       end
     end
